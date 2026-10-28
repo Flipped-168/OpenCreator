@@ -1,3 +1,4 @@
+import { gatewayModelIdMatches } from '@opencreator/protocol';
 import { gatewayModelCompatible, gatewayModelReady, gatewayModelSupports, migrateOpenAiImageModel, type GatewayModel, type GatewayModelPurpose } from '@opencreator/protocol';
 
 export const modelModalities: GatewayModelPurpose[] = ['text', 'image', 'video', 'speech', 'transcription'];
@@ -30,7 +31,7 @@ export function resolveModelPreferences(models: GatewayModel[], defaults: Record
     const defaultId = modality === 'image' ? migrateOpenAiImageModel(defaults[modality] ?? '') : defaults[modality];
     const automatic = candidates.find(model => model.id === defaultId) ?? candidates.find(model => model.recommended);
     if (automatic) recommended[modality] = automatic.id;
-    const chosen = compatible.find(model => model.modality === modality && model.id === manual[modality] && model.status !== 'retired');
+    const chosen = compatible.find(model => model.modality === modality && gatewayModelIdMatches(model.id, manual[modality]) && model.status !== 'retired');
     if (chosen) {
       retained[modality] = chosen.id; selected[modality] = chosen.id; modes[modality] = 'manual';
     } else {

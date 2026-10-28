@@ -225,7 +225,10 @@ async function generateOpenAiImages(
   const configuredModel = provider.model.trim()
     || (request.provider === 'jimeng' ? 'doubao-seedream-4-0-250828' : 'gpt-image-2');
   const model = !official && request.provider !== 'jimeng' ? migrateOpenAiImageModel(configuredModel) : configuredModel;
+  const binding = gatewayCreatorBinding(config);
+  const canonical = official && binding?.catalog?.some(item => item.id === model && item.catalogSchema === 2);
   const parameters = official ? undefined : manualImageParameters(request, request.provider === 'codex-native' ? 'openai' : request.provider, model);
+  const size = canonical ? undefined : parameters?.size ?? request.size;
   const endpoint = openAiImageEndpoint(
     provider.baseUrl,
     referenceImages.length === 0 ? 'generations' : 'edits'
@@ -235,7 +238,7 @@ async function generateOpenAiImages(
     : createImageEditBody({
         model,
         prompt: request.prompt.trim(),
-        size: parameters?.size ?? request.size,
+        size,
         quality: parameters?.quality,
         count: request.count,
         images: referenceImages,
@@ -253,8 +256,12 @@ async function generateOpenAiImages(
     body: multipart?.body ?? JSON.stringify({
         model,
         prompt: request.prompt.trim(),
-        size: parameters?.size ?? request.size,
-        ...(official ? { aspect_ratio: request.aspectRatio, resolution: request.resolution, quality: request.officialQuality } : { quality: parameters?.quality }),
+        size,
+        ...(official ? {
+          ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
+          ...(request.resolution ? { resolution: request.resolution } : {}),
+          ...(request.officialQuality ? { quality: request.officialQuality } : {})
+        } : { quality: parameters?.quality }),
         n: request.count
       }),
     proxy: config.proxy.trim(),
@@ -411,7 +418,7 @@ function versionedOpenAiImageBaseUrl(baseUrl: string): string {
 function createImageEditBody(input: {
   model: string;
   prompt: string;
-  size: string;
+  size?: string;
   quality?: string;
   count: number;
   images: GeneratedImageContent[];
@@ -433,7 +440,7 @@ function createImageEditBody(input: {
   };
   addField('model', input.model);
   addField('prompt', input.prompt);
-  addField('size', input.size);
+  if (input.size) addField('size', input.size);
   if (!input.official && input.quality) addField('quality', input.quality);
   if (input.aspectRatio) addField('aspect_ratio', input.aspectRatio);
   if (input.resolution) addField('resolution', input.resolution);

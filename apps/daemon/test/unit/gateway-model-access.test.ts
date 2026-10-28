@@ -44,8 +44,8 @@ async function fixture(models: GatewayModel[]) {
     setCatalogIDs(ids: string[]) { catalogIDs = ids; }, setCatalogReply(reply: typeof catalogReply) { catalogReply = reply; } };
 }
 
-it('excludes retired image models even when the supplier advertises them', () => {
-  const models: GatewayModel[] = ['gpt-image-1', 'openai/gpt-image-1', 'gpt-image-2'].map(id => ({ id, modality: 'image', capabilities: ['generate'] }));
+it.each([undefined, 2])('excludes retired image models even when catalog schema %s advertises them', catalogSchema => {
+  const models: GatewayModel[] = ['gpt-image-1', 'openai/gpt-image-1', 'gpt-image-2'].map(id => ({ id, catalogSchema, modality: 'image', capabilities: ['generate'] }));
   expect(officialModelPolicy(models).map(model => model.id)).toEqual(['gpt-image-2']);
 });
 
