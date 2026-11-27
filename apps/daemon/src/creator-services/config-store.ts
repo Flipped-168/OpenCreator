@@ -3,7 +3,7 @@ import type {
   CreatorServicesConfigResponse,
   CreatorServicesCredentialField
 } from '@opencreator/protocol';
-import { createDefaultCreatorServicesConfig, migrateOpenAiImageModel } from '@opencreator/protocol';
+import { createDefaultCreatorServicesConfig, defaultVideoGenerationModels, migrateOpenAiImageModel } from '@opencreator/protocol';
 import { z } from 'zod/v3';
 import {
   readOpenCreatorConfig,
@@ -310,10 +310,12 @@ export function createCreatorServicesConfigStoreWithTextModelFallback(
 }
 
 export function parseCreatorServicesConfig(value: unknown): CreatorServicesConfig {
-  return creatorServicesConfigSchema.parse(value) as CreatorServicesConfig;
+  const config = creatorServicesConfigSchema.parse(value) as CreatorServicesConfig;
+  config.video.veo.model = defaultVideoGenerationModels.veo;
+  return config;
 }
 
-const creatorCredentialPaths = [
+export const creatorCredentialPaths = [
   'llm.apiKey',
   'transcription.openai.apiKey',
   'transcription.aliyun.oss.accessKeyId',
@@ -445,7 +447,8 @@ export function presentCreatorServicesConfig(
 
 export function retainCreatorServicesCredentials(
   next: CreatorServicesConfig,
-  current: CreatorServicesConfig
+  current: CreatorServicesConfig,
+  clearCredentials: readonly CreatorServicesCredentialField[] = []
 ): CreatorServicesConfig {
   const merged = structuredClone(next);
   retainBlank(() => merged.llm.apiKey, value => { merged.llm.apiKey = value; }, current.llm.apiKey);
@@ -486,6 +489,7 @@ export function retainCreatorServicesCredentials(
   retainBlank(() => merged.video.kling.accessKey, value => { merged.video.kling.accessKey = value; }, current.video.kling.accessKey);
   retainBlank(() => merged.video.kling.secretKey, value => { merged.video.kling.secretKey = value; }, current.video.kling.secretKey);
   retainBlank(() => merged.video.veo.apiKey, value => { merged.video.veo.apiKey = value; }, current.video.veo.apiKey);
+  for (const path of clearCredentials) writePath(merged, path, '');
   return merged;
 }
 

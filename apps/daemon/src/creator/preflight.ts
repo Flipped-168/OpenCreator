@@ -9,7 +9,12 @@ import type {
   CreatorServicesConfig,
   PublicErrorFacts
 } from '@opencreator/protocol';
-import { creatorPreflightFailure, imagePromptRequiresReference } from '@opencreator/protocol';
+import {
+  creatorPreflightFailure,
+  imagePromptRequiresReference,
+  volcengineTtsUsesApiKey,
+  volcengineAsrCredentialsReady
+} from '@opencreator/protocol';
 import { access, mkdir, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join } from 'node:path';
@@ -29,7 +34,7 @@ import { readStickmanRemotionRuntime } from './stickman/remotion-runtime.js';
 import type { RemotionComponentManager } from './stickman/remotion-component.js';
 import { validateBilibiliSource } from './templates/video-translation-actions.js';
 import type { VideoMetadataService } from '../video-metadata/service.js';
-import { gatewayCreatorBinding } from '../gateway/creator-service-source.js';
+import { CreatorGatewayNotReadyError, gatewayCreatorBinding } from '../gateway/creator-service-source.js';
 import { stickmanShotSpecSchema } from './stickman/contracts.js';
 import { shouldUsePreviousShotReference } from './stickman/image-prompt.js';
 
@@ -100,7 +105,8 @@ export function createCreatorPreflight(input: {
       add('ready', { id: 'executor', title: 'Executor', message: `${stage.executor} loaded`, executionMode: mode });
     }
 
-    try { input.assertServiceSource?.(job.id); } catch {
+    try { input.assertServiceSource?.(job.id); } catch (error) {
+      if (error instanceof CreatorGatewayNotReadyError) throw error;
       add('blocked', { id: 'service-source', title: 'Task service source mismatch', message: 'Restore the original task account and service source before continuing.', executionMode: 'remote' }, { label: 'Open account settings', deepLink: '#/settings?tab=ai-services' });
       return { templateId: job.templateId, templateVersion: job.templateVersion, stageId: stage.id, executionMode: mode, canStart: false, ready, warning, blocked, checkedAt: new Date().toISOString() };
     }
@@ -322,7 +328,7 @@ export function createCreatorPreflight(input: {
         }, { label: 'Open local component settings', deepLink: '#/settings?tab=local-components' });
       }
     }
-    if (stage.executor === 'krillinai' && stage.id === 'subtitle' && job.state.sourceType !== 'subtitle' && !hasImportedSubtitle(job) && !canTryPlatformCaptions(job) && ['whisper.cpp', 'whisperkit', 'faster-whisper'].includes(config.transcription.provider)) {
+    if (stage.executor === 'krillinai' && (stage.id === 'subtitle' || stage.id === 'transcription') && job.state.sourceType !== 'subtitle' && !hasImportedSubtitle(job) && !canTryPlatformCaptions(job) && ['whisper.cpp', 'whisperkit', 'faster-whisper'].includes(config.transcription.provider)) {
       const provider = input.readCapabilities().transcription.providers.find(candidate => candidate.provider === config.transcription.provider);
       if (provider?.available !== true) add('blocked', {
         id: 'transcription-capability',
@@ -472,7 +478,7 @@ async function checkProviderConfig(
       else add('ready', { id: 'video-provider', title: 'Video service', message: `${provider} / ${settings.model} is configured.`, executionMode: 'remote' });
     }
   }
-  if (stage.executor === 'krillinai' && stage.id === 'subtitle' && job.state.sourceType !== 'subtitle' && !hasImportedSubtitle(job)) {
+  if (stage.executor === 'krillinai' && (stage.id === 'subtitle' || stage.id === 'transcription') && job.state.sourceType !== 'subtitle' && !hasImportedSubtitle(job)) {
     const choices = job.state.officialModels;
     const selectedModel = choices && typeof choices === 'object' && !Array.isArray(choices) && typeof choices.transcription === 'string' ? choices.transcription : undefined;
     const assessment = assessKrillinTranscription(config, typeof job.state.sourceLanguage === 'string' ? job.state.sourceLanguage : 'en', selectedModel);
@@ -500,7 +506,7 @@ async function checkProviderConfig(
       add('blocked', { id: 'transcription-config', title: 'Speech recognition credentials missing', message: 'Complete the Aliyun speech recognition credentials.', executionMode: 'remote' }, { label: 'Open AI service settings', deepLink: '#/settings?tab=ai-services&section=transcription' });
     } else if (config.transcription.provider === 'funasr' && (!config.transcription.funasr.baseUrl.trim() || !config.transcription.funasr.model.trim())) {
       add('blocked', { id: 'transcription-config', title: 'Speech recognition configuration missing', message: 'Complete the FunASR Base URL and model.', executionMode: 'remote' }, { label: 'Open AI service settings', deepLink: '#/settings?tab=ai-services&section=transcription' });
-    } else if (config.transcription.provider === 'volcengine' && (!config.transcription.volcengine.appId.trim() || !config.transcription.volcengine.accessToken.trim())) {
+    } else if (config.transcription.provider === 'volcengine' && !volcengineAsrCredentialsReady(config.transcription.volcengine)) {
       add('blocked', { id: 'transcription-config', title: 'Speech recognition credentials missing', message: 'Complete the Volcengine App ID and access token.', executionMode: 'remote' }, { label: 'Open AI service settings', deepLink: '#/settings?tab=ai-services&section=transcription' });
     } else add('ready', { id: 'transcription-config', title: 'Speech recognition', message: `${config.transcription.provider} is configured.`, executionMode: provider.kind === 'local' ? 'local' : 'remote' });
   }
@@ -530,7 +536,13 @@ function checkOpenAi(
 
 function checkTts(config: CreatorServicesConfig, provider: Exclude<CreatorServicesConfig['tts']['provider'], 'edge-tts'>, add: Parameters<typeof checkProviderConfig>[5]) {
   const credentialsReady = provider === 'volcengine'
-    ? Boolean(config.tts.volcengine.appId.trim() && config.tts.volcengine.accessToken.trim())
+    ? Boolean(
+        config.tts.volcengine.accessToken.trim()
+        && (
+          volcengineTtsUsesApiKey(config.tts.volcengine.model)
+          || config.tts.volcengine.appId.trim()
+        )
+      )
     : Boolean(config.tts[provider].apiKey.trim());
   const value = config.tts[provider];
   if (!value.baseUrl.trim() || !value.model.trim() || !credentialsReady) add('blocked', { id: 'tts', title: 'Speech service configuration incomplete', message: `Complete the Base URL, model, and credentials for ${provider}.`, executionMode: 'remote' }, { label: 'Open AI service settings', deepLink: '#/settings?tab=ai-services&section=tts' });

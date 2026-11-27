@@ -30,10 +30,12 @@ describe('KrillinTtsService', () => {
     const service = createKrillinTtsService({ resourceRoot: join(root, 'runtime'), workRoot: join(root, 'work'), configStore: source.store, executeUtility, officialPreviewLanguages });
     await expect(service.listVoices('aliyun', 'personal-model')).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     const result = await service.listVoices('openai', 'official-second');
-    expect(result).toMatchObject({ provider: 'openai', model: 'official-second', voices: [{ id: 'second-voice', provider: 'openai', previewLanguages: ['en'] }] });
+    expect(result).toMatchObject({ provider: 'openai', model: 'official-second', previewCatalogStatus: 'ready', voices: [{ id: 'second-voice', provider: 'openai', previewLanguages: ['en'] }] });
     expect(officialPreviewLanguages).toHaveBeenCalledWith('official-second');
     officialPreviewLanguages.mockRejectedValueOnce(new Error('sample catalog unavailable'));
-    expect(await service.listVoices('openai', 'official-second')).toMatchObject({ voices: [{ id: 'second-voice', previewLanguages: [] }] });
+    expect(await service.listVoices('openai', 'official-second')).toMatchObject({ previewCatalogStatus: 'error', voices: [{ id: 'second-voice', previewLanguages: [] }] });
+    officialPreviewLanguages.mockResolvedValueOnce({ 'second-voice': [], 'first-voice': [] });
+    expect(await service.listVoices('openai', 'official-second')).toMatchObject({ previewCatalogStatus: 'empty', voices: [{ id: 'second-voice', previewLanguages: [] }] });
     expect((await service.listVoices('openai')).voices.map(voice => voice.id)).toEqual(['first-voice']);
     expect(executeUtility).not.toHaveBeenCalled();
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'audio/mpeg' } }));
@@ -332,6 +334,10 @@ describe('KrillinTtsService', () => {
     config.tts.provider = 'volcengine';
     config.tts.volcengine.appId = 'app-1';
     config.tts.volcengine.accessToken = 'token-1';
+    // The default cluster is now the 2.0 one, which routes to V3; this case
+    // exercises the legacy V1 HTTP path, so pin it explicitly.
+    config.tts.volcengine.model = 'volcano_tts';
+    config.tts.volcengine.defaultVoiceId = 'BV001_streaming';
     const audio = Buffer.from('mp3-bytes');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       code: 3000,
@@ -437,6 +443,37 @@ describe('KrillinTtsService', () => {
     expect((fetchMock.mock.calls[1]![1] as RequestInit).headers).toMatchObject({
       'X-Api-Resource-Id': 'seed-icl-2.0'
     });
+  });
+
+  it('uses the speech API key without requiring an App ID for Doubao 2.0', async () => {
+    const root = await temporaryRoot();
+    const config = createDefaultCreatorServicesConfig();
+    config.tts.provider = 'volcengine';
+    config.tts.volcengine.accessToken = 'api-key-1';
+    const audio = Buffer.from('v3-api-key-bytes');
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => new Response([
+      JSON.stringify({ code: 0, data: audio.toString('base64') }),
+      JSON.stringify({ code: 20000000, message: 'OK' })
+    ].join('\n'), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const service = createKrillinTtsService({
+      resourceRoot: join(root, 'runtime'),
+      workRoot: join(root, 'work'),
+      configStore: createConfigStore(config)
+    });
+
+    await expect(service.synthesize({
+      text: '豆包语音二点零',
+      provider: 'volcengine',
+      voiceId: 'zh_female_cancan_uranus_bigtts',
+      format: 'mp3'
+    })).resolves.toMatchObject({ model: 'seed-tts-2.0' });
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.headers;
+    expect(headers).toMatchObject({
+      'X-Api-Key': 'api-key-1',
+      'X-Api-Resource-Id': 'seed-tts-2.0'
+    });
+    expect(headers).not.toHaveProperty('X-Api-App-Id');
   });
 
   it('requires the configured provider API key before synthesis', async () => {

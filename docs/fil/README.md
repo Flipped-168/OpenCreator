@@ -21,8 +21,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Bilibili](https://img.shields.io/badge/dynamic/json?label=Bilibili&query=%24.data.follower&suffix=%E7%B2%89%E4%B8%9D&url=https%3A%2F%2Fapi.bilibili.com%2Fx%2Frelation%2Fstat%3Fvmid%3D242124650&logo=bilibili&color=00A1D6&labelColor=FE7398&logoColor=FFFFFF)](https://space.bilibili.com/242124650)
 [![AtomGit G-Star](https://img.shields.io/badge/AtomGit-G--Star-DA203E?style=flat)](https://atomgit.com/krillinai/OpenCreator)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/fUNvbqDaw)
-[![Grupo sa QQ](https://img.shields.io/badge/QQ%20群-754069680-green?logo=tencent-qq)](https://qm.qq.com/q/W4YC0PLMeA)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/KrillinAIJunxi)
 
 [Mga tampok](#project-highlights) · [Mga tool](#creator-tools) · [Skills](#skills) · [Mga halimbawa](#examples) · [Pagsisimula](#quick-start) · [Desktop](#desktop) · [Dokumentasyon](#documentation) · [Komunidad](#community)
 
@@ -303,6 +302,12 @@ https://github.com/user-attachments/assets/c2c7b528-0ef8-4ba9-b8ac-f9f92f6d4e71
 </table>
 
 > Ginawa ang mga video at larawan ng subtitle alignment noong KrillinAI pa ang pangalan ng OpenCreator.
+
+#### Editor ng Subtitle
+
+Pinapayagan ng built-in na editor ng subtitle na mag-edit nang magkatabi ang orihinal at isinaling teksto, may synchronized na video preview, waveform at timeline na nakaugnay sa playback, at mga customizable na subtitle style.
+
+![OpenCreator subtitle editor](../images/examples/video-translation-subtitle-editor-en.png)
 
 <a id="video-downloader"></a>
 
@@ -590,7 +595,7 @@ Hindi kailangan ng karamihan ang environment variable. Gamitin kapag kailangan n
 | Environment variable | Default | Layunin |
 | --- | --- | --- |
 | `OPENCREATOR_DATA_DIR` | `.runtime` | Database, Run, attachment, at managed workspace ng OpenCreator |
-| `OPENCREATOR_GATEWAY_ORIGIN` | `https://www.open-creator.ai` | Gateway para sa login, subscription, credit, at opisyal na modelo; palitan para sa lokal na Gateway |
+| `OPENCREATOR_GATEWAY_ORIGIN` | `https://open-creator.ai` | Gateway para sa login, subscription, credit, at opisyal na modelo; palitan para sa lokal na Gateway |
 | `OPENCREATOR_CODEX_BIN` | `codex` | Path ng Codex CLI executable |
 | `CODEX_HOME` | `~/.codex` | Awtoridad para sa Codex session, configuration, Skills, MCP, at Profile |
 | `OPENCREATOR_DEFAULT_CWD` | Kasalukuyang working directory | Default na working directory ng daemon |
@@ -679,7 +684,7 @@ Ang root na `README.md` ang pamantayang dokumento sa English. Nasa `docs/<locale
 
 ## Komunidad
 
-<p>May GitHub user mula sa <strong>hindi bababa sa 107 bansa at rehiyon</strong> na nag-star sa OpenCreator.</p>
+<p>May GitHub user mula sa <strong>hindi bababa sa 108 bansa at rehiyon</strong> na nag-star sa OpenCreator.</p>
 
 <img src="../images/star-coverage-map.svg" alt="Mapa ng mga bansa at rehiyon na may nag-star sa OpenCreator sa GitHub" width="760" />
 
@@ -692,7 +697,6 @@ Bawat kasapi ang responsable sa pamantayan, pagsusuri at pag-merge ng kontribusy
 <table border="1" cellpadding="12">
   <tr>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/wulien.svg" width="64" height="64" alt="wulien avatar" /><br /><a href="https://github.com/wulien">wulien</a><br />Code &amp; pag-aayos ng bug</td>
-    <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/dle-kb.svg" width="64" height="64" alt="DLe-kb avatar" /><br /><a href="https://github.com/DLe-kb">DLe-kb</a><br />Mga template</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/xiaheyuan.svg" width="64" height="64" alt="xiaheyuan avatar" /><br /><a href="https://github.com/xiaheyuan">xiaheyuan</a><br />Disenyo &amp; asset</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/krillinai.svg" width="64" height="64" alt="krillinai avatar" /><br /><a href="https://github.com/krillinai">krillinai</a><br />Skills &amp; dokumentasyon</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/hbxugang.svg" width="64" height="64" alt="hbxugang avatar" /><br /><a href="https://github.com/hbxugang">hbxugang</a><br />Enterprise deployment</td>

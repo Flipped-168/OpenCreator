@@ -27,7 +27,7 @@ it('协商稳定密钥策略并拒绝仍会自动轮换的响应', async () => {
   const fetcher = vi.fn<typeof fetch>(async () => Response.json(value));
   const client = createGatewayClient('https://gateway.example', fetcher);
   expect((await client.bootstrap('device-access', { rotate: false, modelUsePolicy: 'cached-key-v1' })).modelUsePolicy).toBe('cached-key-v1');
-  expect(fetcher.mock.calls[0]?.[0]).toBe('https://gateway.example/api/v1/client/bootstrap?protocolVersion=3&catalogSchema=2&publicMetadata=1&rotate=0&modelUsePolicy=cached-key-v1');
+  expect(fetcher.mock.calls[0]?.[0]).toBe('https://gateway.example/api/v1/client/bootstrap?protocolVersion=3&catalogSchema=2&publicMetadata=1&sizeLabels=1&rotate=0&modelUsePolicy=cached-key-v1');
   value.keyRotation = true;
   await expect(client.bootstrap('device-access')).rejects.toThrow();
 });
@@ -181,4 +181,17 @@ it('accepts public gateway metadata while retaining the legacy internal protocol
   const client = createGatewayClient('https://gateway.example', fetcher);
   expect(await client.bootstrap('device-access')).toMatchObject({ transport: 'gateway', supplier: 'chatanywhere' });
   expect(fetcher.mock.calls[0]?.[0]).toContain('publicMetadata=1');
+});
+
+it('accepts image resolution labels alongside pixel video sizes in gateway bootstrap', async () => {
+  const models = [
+    { id: 'deepseek-flash', modality: 'text', capabilities: ['chat', 'responses'] },
+    { id: 'seedream', modality: 'image', capabilities: ['generate'], sizes: ['1K', '2K', '4K'] },
+    { id: 'seedance', modality: 'video', capabilities: ['generate'], sizes: ['1280x720'] }
+  ];
+  const value = { schemaVersion: 3, transport: 'gateway', keyRotation: false, account: { id: 'a', email: 'a@test', verified: true }, keyVersion: 'gateway-v1', bindingVersion: 'a:gateway:v1', baseUrl: 'https://gateway.example/v1', models, defaults: { text: 'deepseek-flash' } };
+  const client = createGatewayClient('https://gateway.example', vi.fn<typeof fetch>(async () => Response.json(value)));
+
+  expect((await client.bootstrap('device-access')).models).toMatchObject(models);
+  expect(catalogSchema.safeParse({ models: [{ ...models[1], sizes: ['4K?'] }] }).success).toBe(false);
 });

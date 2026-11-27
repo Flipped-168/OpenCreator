@@ -21,8 +21,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Bilibili](https://img.shields.io/badge/dynamic/json?label=Bilibili&query=%24.data.follower&suffix=%E7%B2%89%E4%B8%9D&url=https%3A%2F%2Fapi.bilibili.com%2Fx%2Frelation%2Fstat%3Fvmid%3D242124650&logo=bilibili&color=00A1D6&labelColor=FE7398&logoColor=FFFFFF)](https://space.bilibili.com/242124650)
 [![AtomGit G-Star](https://img.shields.io/badge/AtomGit-G--Star-DA203E?style=flat)](https://atomgit.com/krillinai/OpenCreator)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/fUNvbqDaw)
-[![Grupo de QQ](https://img.shields.io/badge/QQ%20群-754069680-green?logo=tencent-qq)](https://qm.qq.com/q/W4YC0PLMeA)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/KrillinAIJunxi)
 
 [Destacados](#características-principales) · [Herramientas](#herramientas-de-creación) · [Skills](#skills) · [Ejemplos](#ejemplos) · [Inicio](#inicio-rápido) · [Desktop](#desktop) · [Docs](#documentación) · [Comunidad](#comunidad)
 
@@ -261,6 +260,12 @@ https://github.com/user-attachments/assets/c2c7b528-0ef8-4ba9-b8ac-f9f92f6d4e71
 </table>
 
 > Estos ejemplos de vídeo y la imagen de alineación de subtítulos se produjeron cuando OpenCreator todavía utilizaba el nombre KrillinAI.
+
+#### Editor de subtítulos
+
+El editor de subtítulos integrado permite editar el texto original y la traducción en paralelo, previsualizar el vídeo sincronizado, utilizar una forma de onda y una línea de tiempo vinculadas a la reproducción y personalizar los estilos de subtítulos.
+
+![OpenCreator subtitle editor](../images/examples/video-translation-subtitle-editor-en.png)
 
 ### Descarga de vídeos
 
@@ -568,7 +573,7 @@ El archivo `README.md` de la raíz es el documento canónico en inglés. Las tra
 
 ## Comunidad
 
-<p>Usuarios de GitHub de <strong>al menos 107 países y regiones</strong> han dado una estrella a OpenCreator.</p>
+<p>Usuarios de GitHub de <strong>al menos 108 países y regiones</strong> han dado una estrella a OpenCreator.</p>
 
 <img src="../images/star-coverage-map.svg" alt="Mapa mundial con los países y regiones de usuarios de GitHub que dieron una estrella a OpenCreator" width="760" />
 
@@ -579,7 +584,6 @@ Cada integrante se encarga de las normas, la revisión y fusión de contribucion
 <table border="1" cellpadding="12">
   <tr>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/wulien.svg" width="64" height="64" alt="wulien avatar" /><br /><a href="https://github.com/wulien">wulien</a><br />Código y corrección de errores</td>
-    <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/dle-kb.svg" width="64" height="64" alt="DLe-kb avatar" /><br /><a href="https://github.com/DLe-kb">DLe-kb</a><br />Plantillas de creación</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/xiaheyuan.svg" width="64" height="64" alt="xiaheyuan avatar" /><br /><a href="https://github.com/xiaheyuan">xiaheyuan</a><br />Diseño y recursos</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/krillinai.svg" width="64" height="64" alt="krillinai avatar" /><br /><a href="https://github.com/krillinai">krillinai</a><br />Skills y documentación</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/hbxugang.svg" width="64" height="64" alt="hbxugang avatar" /><br /><a href="https://github.com/hbxugang">hbxugang</a><br />Despliegue empresarial</td>

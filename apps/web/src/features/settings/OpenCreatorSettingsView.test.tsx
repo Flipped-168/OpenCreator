@@ -24,6 +24,24 @@ const runtimeStatus = {
 };
 
 describe('OpenCreatorSettingsView', () => {
+  it.each([
+    { language: 'en-US', heading: 'AI Services', setup: 'Set up Agent' },
+    { language: 'zh-CN', heading: 'AI 服务', setup: '配置 Agent' }
+  ] as const)('omits the Agent setup row when Agent is configured ($language)', async ({ language, heading, setup }) => {
+    const codexRuntimeService = {
+      getCodexProvider: vi.fn(async () => ({ baseUrl: '', model: 'local-model', apiKeyConfigured: false, authentication: 'chatgpt' as const })),
+      updateCodexProvider: vi.fn()
+    };
+    const { container } = render(<LanguageProvider initialPreference={language}>
+      <OpenCreatorSettingsView runtimeStatus={runtimeStatus} initialTab="ai-services"
+        codexRuntimeService={codexRuntimeService} agentSetupNeeded={false} onBack={vi.fn()} />
+    </LanguageProvider>);
+
+    expect(await screen.findByRole('heading', { name: heading })).toBeVisible();
+    expect(screen.queryByRole('button', { name: setup })).not.toBeInTheDocument();
+    expect(container.querySelector('.settings-inline-warning')).not.toBeInTheDocument();
+  });
+
   it('shows connection diagnostics and reconnects official services without a model probe', async () => {
     const blocked: GatewayAccountState = { source: 'gateway', authState: 'signed_in', activationState: 'blocked', account: { id: 'a', email: 'a@test', verified: true }, bindingVersion: null,
       models: [{ id: 'vendor/text', modality: 'text', capabilities: ['responses'] }], activationError: { code: 'gateway_unavailable', message: 'Unavailable', stage: 'usage', request: { path: '/api/v1/client/usage', reason: 'http', httpStatus: 503 } } };
@@ -160,7 +178,9 @@ describe('OpenCreatorSettingsView', () => {
     expect(screen.queryByRole('button', { name: '订阅与积分' })).not.toBeInTheDocument();
   });
   it('renders default navigation and general settings without old work mode copy', () => {
-    render(<OpenCreatorSettingsView runtimeStatus={runtimeStatus} onBack={vi.fn()} />);
+    render(<LanguageProvider initialPreference="system">
+      <OpenCreatorSettingsView runtimeStatus={runtimeStatus} onBack={vi.fn()} />
+    </LanguageProvider>);
 
     expect(screen.getByRole('button', { name: '返回应用' })).toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
@@ -186,7 +206,7 @@ describe('OpenCreatorSettingsView', () => {
     expect(screen.getByRole('option', { name: '跟随系统（简体中文）' })).toBeInTheDocument();
     expect(screen.getByText('菜单栏显示')).toBeInTheDocument();
     expect(screen.queryByRole('switch', { name: '动态背景' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: /发送匿名使用数据/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /发送数据帮助我们改进/ })).not.toBeInTheDocument();
     expect(screen.queryByText('工作模式')).not.toBeInTheDocument();
     expect(screen.queryByText('适用于编程')).not.toBeInTheDocument();
   });
@@ -351,7 +371,7 @@ describe('OpenCreatorSettingsView', () => {
     expect(onColorModeChange).toHaveBeenCalledWith('light');
   });
 
-  it('renders seven accent color swatches and notifies when the selection changes', () => {
+  it('renders the OpenCreator yellow swatch first and notifies when the selection changes', () => {
     const onAccentColorChange = vi.fn();
     render(
       <OpenCreatorSettingsView
@@ -363,8 +383,11 @@ describe('OpenCreatorSettingsView', () => {
     );
 
     const accentControl = screen.getByRole('radiogroup', { name: '重点色' });
-    expect(within(accentControl).getAllByRole('radio')).toHaveLength(7);
-    expect(within(accentControl).getByRole('radio', { name: '默认灰' }))
+    const swatches = within(accentControl).getAllByRole('radio');
+    expect(swatches).toHaveLength(8);
+    expect(swatches[0]).toHaveAccessibleName('OpenCreator');
+    expect(swatches[0]).toHaveStyle({ '--settings-accent-swatch': '#f4d914' });
+    expect(within(accentControl).getByRole('radio', { name: '中性灰' }))
       .toHaveAttribute('aria-checked', 'true');
     const customAccent = within(accentControl).getByRole('radio', { name: '自定义' });
     expect(customAccent).toHaveTextContent('自定义');
@@ -378,6 +401,13 @@ describe('OpenCreatorSettingsView', () => {
 
     fireEvent.click(within(accentControl).getByRole('radio', { name: '橙色' }));
     expect(onAccentColorChange).toHaveBeenCalledWith('orange');
+  });
+
+  it('selects the OpenCreator accent when no preference is supplied', () => {
+    render(<OpenCreatorSettingsView runtimeStatus={runtimeStatus} onBack={vi.fn()} />);
+
+    const accentControl = screen.getByRole('radiogroup', { name: '重点色' });
+    expect(within(accentControl).getAllByRole('radio')[0]).toHaveAttribute('aria-checked', 'true');
   });
 
   it('validates and applies a custom accent color without blocking draft input', () => {
@@ -504,7 +534,7 @@ describe('OpenCreatorSettingsView', () => {
     expect(screen.queryByRole('button', { name: 'Select 完成产物位置' })).not.toBeInTheDocument();
   });
 
-  it('shows the anonymous telemetry scope and allows Desktop users to disable it', () => {
+  it('shows the telemetry scope and allows Desktop users to disable it', () => {
     const onDesktopTelemetryEnabledChange = vi.fn();
     render(
       <OpenCreatorSettingsView
@@ -516,11 +546,11 @@ describe('OpenCreatorSettingsView', () => {
       />
     );
 
-    const telemetry = screen.getByRole('switch', { name: /发送匿名使用数据/ });
+    const telemetry = screen.getByRole('switch', { name: /发送数据帮助我们改进/ });
     expect(telemetry).toBeChecked();
     fireEvent.click(telemetry);
     expect(onDesktopTelemetryEnabledChange).toHaveBeenCalledWith(false);
-    expect(screen.getByText(/不包含项目、文件或对话内容/)).toBeInTheDocument();
+    expect(screen.getByText(/发送基本使用情况、错误信息及账号 ID/)).toBeInTheDocument();
   });
 
   it('does not show Codex CLI version on the initial general tab', () => {

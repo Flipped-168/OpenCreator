@@ -25,6 +25,28 @@ it.each([false, true])('opens speech style and speed only when the selected offi
   expect(screen.queryByRole('slider') !== null).toBe(supported);
 });
 
+it('defaults an unselected official speech model to the first available option in the visible list', async () => {
+  const fixture = createFixture();
+  const state: GatewayAccountState = {
+    source: 'gateway', transport: 'gateway', authState: 'signed_in', activationState: 'ready',
+    account: { id: 'a', email: 'a@test', verified: true }, bindingVersion: '1', activationError: null,
+    selectedModels: {}, models: [
+      { id: 'vendor/zulu', name: 'Zulu Voice', modality: 'speech', capabilities: [], voices: ['Zulu'] },
+      { id: 'vendor/alpha', name: 'Alpha Voice', modality: 'speech', capabilities: [], voices: ['Alpha'] }
+    ]
+  };
+  render(<LanguageProvider initialPreference="en-US"><CreatorSessionProvider initialJob={fixture.currentJob()} service={fixture}>
+    <OfficialServicesContext.Provider value={state}><SmartDubbingWorkspace onBack={vi.fn()} /></OfficialServicesContext.Provider>
+  </CreatorSessionProvider></LanguageProvider>);
+
+  const model = screen.getByRole('combobox', { name: 'Model' });
+  fireEvent.click(model);
+  expect(within(screen.getByRole('listbox', { name: 'Model' })).getAllByRole('option')[0]).toHaveAccessibleName('Alpha Voice');
+  fireEvent.keyDown(model, { key: 'Escape' });
+  expect(model).toHaveValue('Alpha Voice');
+  await waitFor(() => expect(fixture.currentJob().state.officialModels).toMatchObject({ speech: 'vendor/alpha' }));
+});
+
 it('validates and submits the complete dubbing form directly without persisting wizard steps', async () => {
   const fixture = createFixture({ voiceCode: '' });
   await renderWorkspace(fixture);
@@ -44,7 +66,7 @@ it('validates and submits the complete dubbing form directly without persisting 
   fireEvent.click(screen.getByRole('radio', { name: 'WAV' }));
   fireEvent.click(submit);
   await waitFor(() => expect(fixture.applyAction).toHaveBeenCalledWith('tts-job', expect.objectContaining({ action: 'run-stage', input: { stageId: 'tts' } })));
-  expect(fixture.currentJob().state).toMatchObject({ text: 'A clear voice.', voiceCode: 'cedar', voiceName: 'Cedar', style: 'warm', speed: .9, format: 'wav' });
+  expect(fixture.currentJob().state).toMatchObject({ text: 'A clear voice.', voiceCode: 'cedar', voiceName: 'Cedar', style: 'warm', speed: .9, format: 'wav', __creatorUserSelected: true });
   for (const [, request] of fixture.applyAction.mock.calls) {
     if (request.action === 'update-settings') {
       expect(request.input.patch).not.toHaveProperty('currentStep');
@@ -119,8 +141,10 @@ it('shows provider failures on the same page with a settings recovery link', asy
   const fixture = createFixture({ text: 'Saved script' });
   const job = fixture.currentJob();
   await renderWorkspace(fixture, { ...job, status: 'failed', stages: [{ id: 'stage', jobId: job.id, stageId: 'tts', executor: 'smart-dubbing', status: 'failed', dispatchStatus: 'finished', claimOwner: null, claimExpiresAt: null, attempt: 1, idempotencyKey: null, scopeKey: null, inputFingerprint: null, progress: {}, errorCode: 'creator_tts_config_missing', errorMessage: 'Missing API key', startedAt: job.createdAt, finishedAt: job.createdAt }] });
-  expect(document.querySelector('.smart-dubbing-error')).toHaveTextContent('请先在设置的配音服务中配置当前服务商的 API Key');
-  expect(within(document.querySelector('.smart-dubbing-error') as HTMLElement).getByRole('link')).toHaveAttribute('href', '#/settings?tab=ai-services&section=tts');
+  const notice = screen.getByRole('alert');
+  expect(notice).toHaveTextContent('文本转语音 · 失败');
+  expect(notice).toHaveTextContent('请先在设置的配音服务中配置当前服务商的 API Key');
+  expect(within(notice).getByRole('link')).toHaveAttribute('href', '#/settings?tab=ai-services&section=tts');
   expect(screen.getByRole('textbox', { name: '配音文案内容' })).toHaveValue('Saved script');
   expect(screen.getByRole('button', { name: '开始生成' })).toBeEnabled();
 });
@@ -135,8 +159,8 @@ it.each([
   const editor = screen.getByRole('textbox', { name: copy.script });
   fireEvent.click(within(form).getByRole('button', { name: copy.sample }));
   expect((editor as HTMLTextAreaElement).value.length).toBeGreaterThan(20);
-  fireEvent.click(within(form).getByRole('button', { name: copy.expand }));
-  expect(editor).toHaveAttribute('rows', '14');
+  expect(within(form).queryByRole('button', { name: copy.expand })).not.toBeInTheDocument();
+  expect(editor).toHaveAttribute('rows', '5');
   fireEvent.click(within(form).getByRole('button', { name: copy.clear }));
   expect(editor).toHaveValue('');
   expect(within(screen.getByRole('complementary', { name: 'OpenCreator' })).getByRole('complementary', { name: copy.summary })).toBeInTheDocument();
@@ -157,6 +181,19 @@ it('provides voice library search, filters, and gender labels in every client la
     for (const [zh, en] of [['搜索音色', 'Search voices'], ['全部语言', 'All languages'], ['全部性别', 'All genders'], ['全部风格', 'All styles'], ['没有匹配的音色', 'No matching voices'], ['男声', 'Male'], ['女声', 'Female'], ['多语种', 'Multilingual']]) {
       expect(l(zh!, en!), `${value}: ${en}`).not.toBe(en);
     }
+  }
+});
+
+it('shows provider icons in the selected speech model and its options', async () => {
+  await renderWorkspace(createFixture());
+  const trigger = screen.getByRole('combobox', { name: '语音模型' });
+  expect(trigger.querySelector('.model-brand-icon')).toHaveAttribute('data-brand', 'openai');
+  fireEvent.click(trigger);
+
+  for (const [name, brand] of [['OpenAI TTS', 'openai'], ['MiniMax', 'minimax'], ['阿里云百炼', 'qwen'], ['火山引擎', 'bytedance']]) {
+    const option = screen.getByRole('option', { name: new RegExp(`^${name}`) });
+    expect(option.querySelector('.model-brand-icon')).toHaveAttribute('data-brand', brand);
+    expect(option.querySelector('img')).toHaveAttribute('src', expect.stringMatching(/^\/model-brands\//));
   }
 });
 

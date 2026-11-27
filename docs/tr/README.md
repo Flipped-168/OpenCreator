@@ -21,8 +21,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Bilibili](https://img.shields.io/badge/dynamic/json?label=Bilibili&query=%24.data.follower&suffix=%E7%B2%89%E4%B8%9D&url=https%3A%2F%2Fapi.bilibili.com%2Fx%2Frelation%2Fstat%3Fvmid%3D242124650&logo=bilibili&color=00A1D6&labelColor=FE7398&logoColor=FFFFFF)](https://space.bilibili.com/242124650)
 [![AtomGit G-Star](https://img.shields.io/badge/AtomGit-G--Star-DA203E?style=flat)](https://atomgit.com/krillinai/OpenCreator)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/fUNvbqDaw)
-[![QQ Grubu](https://img.shields.io/badge/QQ%20群-754069680-green?logo=tencent-qq)](https://qm.qq.com/q/W4YC0PLMeA)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/KrillinAIJunxi)
 
 [Öne Çıkanlar](#proje-özellikleri) · [İçerik Üretim Araçları](#içerik-üretim-araçları) · [Skills](#skills) · [Örnekler](#örnekler) · [Hızlı Başlangıç](#hızlı-başlangıç) · [Desktop](#desktop) · [Belgeler](#belgeler) · [Topluluk](#topluluk)
 
@@ -241,6 +240,12 @@ https://github.com/user-attachments/assets/c2c7b528-0ef8-4ba9-b8ac-f9f92f6d4e71
 </table>
 
 > Bu video örnekleri ve altyazı hizalama görseli, OpenCreator hâlâ KrillinAI adını kullanırken üretildi.
+
+#### Altyazı Düzenleyici
+
+Yerleşik altyazı düzenleyici; özgün ve çevrilmiş metinleri yan yana düzenleme, eşzamanlı video önizleme, oynatmayla bağlantılı dalga formu ve zaman çizelgesi ve özelleştirilebilir altyazı stilleri sunar.
+
+![OpenCreator subtitle editor](../images/examples/video-translation-subtitle-editor-en.png)
 
 ### Video İndirme
 
@@ -480,7 +485,7 @@ Abonelik planları OpenCreator içinde seçilir. Satın alma Stripe Checkout'u, 
 | Değişken | Varsayılan | Amaç |
 | --- | --- | --- |
 | `OPENCREATOR_DATA_DIR` | `.runtime` | OpenCreator veritabanı, Runs, ekler ve yönetilen çalışma alanları |
-| `OPENCREATOR_GATEWAY_ORIGIN` | `https://www.open-creator.ai` | Hesap oturumu, abonelikler, krediler ve resmî model servisleri için Gateway; yerel Gateway kullanmak için değiştirilebilir |
+| `OPENCREATOR_GATEWAY_ORIGIN` | `https://open-creator.ai` | Hesap oturumu, abonelikler, krediler ve resmî model servisleri için Gateway; yerel Gateway kullanmak için değiştirilebilir |
 | `OPENCREATOR_CODEX_BIN` | `codex` | Codex CLI çalıştırılabilir dosyasının yolu |
 | `CODEX_HOME` | `~/.codex` | Codex oturumları, yapılandırma, Skills, MCP ve Profiles için doğruluk kaynağı |
 | `OPENCREATOR_DEFAULT_CWD` | Geçerli çalışma dizini | Varsayılan daemon çalışma dizini |
@@ -557,7 +562,7 @@ Kök `README.md` dosyası kanonik İngilizce belgedir. Bakımı yapılan çeviri
 
 ## Topluluk
 
-<p>GitHub'da OpenCreator'a <strong>en az 107 ülke ve bölgeden</strong> kullanıcı yıldız vermiştir.</p>
+<p>GitHub'da OpenCreator'a <strong>en az 108 ülke ve bölgeden</strong> kullanıcı yıldız vermiştir.</p>
 
 <img src="../images/star-coverage-map.svg" alt="OpenCreator GitHub yıldızlarının geldiği ülke ve bölgeleri gösteren dünya haritası" width="760" />
 
@@ -568,7 +573,6 @@ Her ekip üyesi kendi alanından, standartlarından, katkı incelemelerinden ve 
 <table border="1" cellpadding="12">
   <tr>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/wulien.svg" width="64" height="64" alt="wulien avatar" /><br /><a href="https://github.com/wulien">wulien</a><br />Kod ve hata düzeltmeleri</td>
-    <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/dle-kb.svg" width="64" height="64" alt="DLe-kb avatar" /><br /><a href="https://github.com/DLe-kb">DLe-kb</a><br />Üretim şablonları</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/xiaheyuan.svg" width="64" height="64" alt="xiaheyuan avatar" /><br /><a href="https://github.com/xiaheyuan">xiaheyuan</a><br />Tasarım ve varlıklar</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/krillinai.svg" width="64" height="64" alt="krillinai avatar" /><br /><a href="https://github.com/krillinai">krillinai</a><br />Skills ve belgeler</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/hbxugang.svg" width="64" height="64" alt="hbxugang avatar" /><br /><a href="https://github.com/hbxugang">hbxugang</a><br />Kurumsal dağıtım</td>

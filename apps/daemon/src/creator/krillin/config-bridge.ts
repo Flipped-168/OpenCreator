@@ -10,7 +10,7 @@ export function createKrillinConfigToml(
 ): string {
   const llm = llmOverride ?? config.llm;
   const document = compact({
-    app: { proxy: officialTranscriptionModel ? '' : config.proxy },
+    app: { proxy: config.proxy },
     llm: {
       base_url: llm.baseUrl,
       api_key: llm.apiKey,

@@ -1,9 +1,12 @@
 import SuggestedInput from '../../components/forms/SuggestedInput.js';
 import AppSelect from '../../components/forms/Select.js';
+import LanguageSelect from '../../components/forms/LanguageSelect.js';
 import { creatorProviderCatalogById } from '@opencreator/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, LogIn, Monitor } from 'lucide-react';
 import OpenCreatorMark from '../../components/brand/OpenCreatorMark.js';
+import { useAppLanguage } from '../../i18n/LanguageProvider.js';
+import { appLanguageOptions, resolveSystemLanguage } from '../../i18n/language.js';
 import { useLocalizedCopy } from '../../i18n/useLocalizedCopy.js';
 import type { ConnectionService } from '../../services/connection-service.js';
 import { inferLlmProviderId, llmProviderOptions } from './llm-provider-selection.js';
@@ -32,6 +35,8 @@ export function StartupAgentSetup(props: {
   openExternal?(url: string): Promise<void> | void;
 }) {
   const l = useLocalizedCopy();
+  const { preference, setPreference, t } = useAppLanguage();
+  const systemLanguageName = appLanguageOptions.find(option => option.value === resolveSystemLanguage())?.label ?? 'English';
   const activeRef = useRef(true);
   const gateway = useRef(props.gatewayState);
   const [snapshot, setSnapshot] = useState(props.initialSnapshot);
@@ -235,6 +240,11 @@ export function StartupAgentSetup(props: {
         <button className="startup-agent-setup__skip" type="button" disabled={busy} onClick={() => void skip()}>
           {l('稍后配置，进入本地模式', 'Continue locally and set up later')}
         </button>
+        <div className="startup-agent-setup__language">
+          <LanguageSelect id="startup-display-language" label={t('settings.language')}
+            value={preference} systemLabel={t('settings.language.system', { language: systemLanguageName })}
+            onChange={setPreference} />
+        </div>
       </section>
     </main>
   );

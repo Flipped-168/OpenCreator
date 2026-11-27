@@ -17,7 +17,8 @@ import {
   type KlingAiConfig,
   type OpenAiCompatibleConfig,
   type VolcengineAsrConfig,
-  type VolcengineTtsConfig
+  type VolcengineTtsConfig,
+  volcengineTtsUsesApiKey
 } from '@opencreator/protocol';
 import {
   AudioLines,
@@ -28,7 +29,6 @@ import {
   Cloud,
   Eye,
   EyeOff,
-  FileKey2,
   HardDriveDownload,
   Image,
   Languages,
@@ -85,6 +85,7 @@ export function CreatorServicesSettingsView(props: {
   const [modelName, setModelName] = useState('');
   const [modelApiKey, setModelApiKey] = useState('');
   const [configuredCredentials, setConfiguredCredentials] = useState<ReadonlySet<CreatorServicesCredentialField>>(new Set());
+  const [clearCredentials, setClearCredentials] = useState<ReadonlySet<CreatorServicesCredentialField>>(new Set());
   const [savedTranscriptionSelection, setSavedTranscriptionSelection] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -119,8 +120,9 @@ export function CreatorServicesSettingsView(props: {
         ?? Promise.reject(new Error('Model provider configuration is unavailable'))
       ,props.modelService?.getCodexModels?.()
         ?? Promise.reject(new Error('Model catalog is unavailable'))
+      ,props.service.getLocalVideoConfig?.() ?? Promise.resolve(undefined)
     ])
-      .then(([configResult, capabilitiesResult, providerResult, modelsResult]) => {
+      .then(([configResult, capabilitiesResult, providerResult, modelsResult, localVideoResult]) => {
         if (!active) return;
         if (configResult.status === 'rejected' || capabilitiesResult.status === 'rejected') {
           setConfig(undefined);
@@ -139,14 +141,20 @@ export function CreatorServicesSettingsView(props: {
         }
         pageIssues.resolveOperation('settings.creator-services.load');
         const response = configResult.value;
+        const localVideo = localVideoResult.status === 'fulfilled' ? localVideoResult.value : undefined;
+        const displayedConfig = localVideo ? { ...response.config, video: localVideo.config.video } : response.config;
         setRuntimeModelIds(modelsResult.status === 'fulfilled'
           ? modelsResult.value.models.map(model => model.model)
           : []);
-        setConfig(response.config);
+        setConfig(displayedConfig);
         setSavedImageProvider(response.config.image.provider);
         setTextModelMode(response.config.llm.source);
         setCapabilities(capabilitiesResult.value);
-        setConfiguredCredentials(new Set(response.configuredCredentials));
+        setConfiguredCredentials(new Set([
+          ...response.configuredCredentials.filter(field => !field.startsWith('video.')),
+          ...(localVideo?.configuredCredentials ?? response.configuredCredentials).filter(field => field.startsWith('video.'))
+        ]));
+        setClearCredentials(new Set());
         setSavedTranscriptionSelection(transcriptionSelection(response.config));
         const useLegacyTextModel = response.config.llm.source === 'custom';
         if (providerResult.status === 'fulfilled') {
@@ -227,6 +235,15 @@ export function CreatorServicesSettingsView(props: {
     setNotice(undefined);
   }
 
+  function setCredentialCleared(field: CreatorServicesCredentialField, cleared: boolean) {
+    setClearCredentials(current => {
+      const next = new Set(current);
+      if (cleared) next.add(field);
+      else next.delete(field);
+      return next;
+    });
+  }
+
   async function save() {
     if (config === undefined || capabilities === undefined || props.service === null) return;
     const selectedCapability = transcriptionCapability(
@@ -286,11 +303,21 @@ export function CreatorServicesSettingsView(props: {
           };
         }
       }
-      const response = await props.service.saveConfig(nextConfig);
-      setConfig(response.config);
-      setSavedImageProvider(response.config.image.provider);
-      setConfiguredCredentials(new Set(response.configuredCredentials));
-      setSavedTranscriptionSelection(transcriptionSelection(response.config));
+      const credentialsToClear = [...clearCredentials];
+      const response = activeSection === 'video' && props.service.saveLocalVideoConfig
+        ? await props.service.saveLocalVideoConfig(nextConfig.video, credentialsToClear.filter(field => field.startsWith('video.')))
+        : credentialsToClear.length === 0
+          ? await props.service.saveConfig(nextConfig)
+          : await props.service.saveConfig(nextConfig, credentialsToClear);
+      const savedConfig = activeSection === 'video' && props.service.saveLocalVideoConfig
+        ? { ...nextConfig, video: response.config.video } : response.config;
+      setConfig(savedConfig);
+      setSavedImageProvider(savedConfig.image.provider);
+      setConfiguredCredentials(current => new Set(activeSection === 'video' && props.service?.saveLocalVideoConfig
+        ? [...[...current].filter(field => !field.startsWith('video.')), ...response.configuredCredentials.filter(field => field.startsWith('video.'))]
+        : response.configuredCredentials));
+      setClearCredentials(new Set());
+      setSavedTranscriptionSelection(transcriptionSelection(savedConfig));
       pageIssues.resolveOperation('settings.creator-services.save');
       setNotice(l('配置已安全保存', 'Settings saved securely'));
       const pending = readTranslationContinuation();
@@ -365,10 +392,6 @@ export function CreatorServicesSettingsView(props: {
             'Configure the model services used for text, speech, image, and video generation.'
           )}</p>
         </div>
-        <span className="creator-services-security">
-          <FileKey2 size={16} aria-hidden="true" />
-          {l('本地配置文件', 'Local configuration file')}
-        </span>
       </header>
 
       {props.modeControls}
@@ -456,6 +479,7 @@ export function CreatorServicesSettingsView(props: {
               update={updateConfig}
               configuredCredentials={configuredCredentials}
               capabilities={capabilities}
+              onCredentialClearChange={setCredentialCleared}
             />
           ) : null}
           {activeSection === 'tts' ? (
@@ -464,6 +488,7 @@ export function CreatorServicesSettingsView(props: {
               update={updateConfig}
               configuredCredentials={configuredCredentials}
               service={props.service}
+              onCredentialClearChange={setCredentialCleared}
             />
           ) : null}
           {activeSection === 'image' ? (
@@ -703,6 +728,7 @@ function modelFieldFailure(
 
 function TranscriptionSettings(props: SettingsGroupProps & {
   capabilities: CreatorServicesCapabilitiesResponse;
+  onCredentialClearChange(field: CreatorServicesCredentialField, cleared: boolean): void;
 }) {
   const l = useLocalizedCopy();
   const provider = props.config.transcription.provider;
@@ -866,11 +892,15 @@ function TranscriptionSettings(props: SettingsGroupProps & {
             onChange={value => props.update(config => {
               config.transcription.volcengine = value;
             })}
+            onAppIdClearChange={cleared => props.onCredentialClearChange(
+              'transcription.volcengine.appId',
+              cleared
+            )}
           />
           <p className="creator-services-inline-note">
             {l(
-              '使用豆包语音控制台的 App ID 和 Access Token。录音文件识别、TTS V1 与 TTS V3 共用同一套 Access Token，仅请求头字段名不同。',
-              'Use the App ID and Access Token from the Doubao Voice console. File recognition, TTS V1, and TTS V3 share that Access Token; only the HTTP field names differ.'
+              '豆包语音控制台：旧版填 App ID 和 Access Token，新版只填 API Key（App ID 留空）。录音文件识别、TTS V1 与 TTS V3 共用同一凭据，仅请求头字段名不同。',
+              'Doubao Voice console: fill App ID plus Access Token for the old console, or leave App ID empty and use only the API Key for the new one. File recognition, TTS V1, and TTS V3 share that credential; only the HTTP field names differ.'
             )}
           </p>
         </>
@@ -926,7 +956,9 @@ function TranscriptionModeField(props: {
   );
 }
 
-function TtsSettings(props: SettingsGroupProps) {
+function TtsSettings(props: SettingsGroupProps & {
+  onCredentialClearChange(field: CreatorServicesCredentialField, cleared: boolean): void;
+}) {
   const l = useLocalizedCopy();
   const provider = props.config.tts.provider;
   return (
@@ -1004,6 +1036,10 @@ function TtsSettings(props: SettingsGroupProps) {
           <VolcengineTtsFields
             configuredCredentials={props.configuredCredentials}
             value={props.config.tts.volcengine}
+            onAppIdClearChange={cleared => props.onCredentialClearChange(
+              'tts.volcengine.appId',
+              cleared
+            )}
             onChange={value => props.update(config => {
               const previousModel = config.tts.volcengine.model;
               config.tts.volcengine = { ...config.tts.volcengine, ...value };
@@ -1014,8 +1050,8 @@ function TtsSettings(props: SettingsGroupProps) {
           />
           <p className="creator-services-inline-note">
             {l(
-              '使用与语音识别相同的豆包语音控制台 App ID 和 Access Token。小模型走 V1 HTTP（Bearer Token）；豆包 2.0 / 声音复刻走 V3（X-Api-Access-Key）。可在音色列表选择官方音色，或填写克隆 Speaker ID（S_ 开头）。',
-              'Use the same Doubao Voice console App ID and Access Token as transcription. Small-model voices use V1 HTTP (Bearer token). Doubao 2.0 and voice cloning use V3 (X-Api-Access-Key). Pick an official voice or enter a cloned speaker ID starting with S_.'
+              '豆包语音 2.0 使用 API Key；旧版小模型使用 App ID 和 Access Token。可在音色列表选择官方音色，或填写克隆 Speaker ID（S_ 开头）。',
+              'Doubao TTS 2.0 uses an API key. Legacy small models use an App ID and Access Token. Pick an official voice or enter a cloned Speaker ID starting with S_.'
             )}
           </p>
         </>
@@ -1107,7 +1143,7 @@ function VideoSettings(props: SettingsGroupProps) {
         options={[
           ['seedance', 'Seedance'],
           ['kling', l('可灵', 'Kling')],
-          ['veo', 'Veo']
+          ['veo', 'Gemini Omni Flash']
         ]}
         onChange={value => props.update(config => {
           const nextProvider = value as CreatorServicesConfig['video']['provider'];
@@ -1121,7 +1157,7 @@ function VideoSettings(props: SettingsGroupProps) {
       />
       {provider === 'seedance' ? <OpenAiFields id="video-seedance" credential="video.seedance.apiKey" configuredCredentials={props.configuredCredentials} value={props.config.video.seedance} modelLabel={l('默认模型', 'Default model')} modelPlaceholder={defaultVideoGenerationModels.seedance} modelSuggestions={videoGenerationModelIds.seedance} baseUrlPlaceholder="https://ark.cn-beijing.volces.com/api/v3" onChange={value => props.update(config => { config.video.seedance = value; })} /> : null}
       {provider === 'kling' ? <KlingFields id="video-kling" accessKeyCredential="video.kling.accessKey" secretKeyCredential="video.kling.secretKey" configuredCredentials={props.configuredCredentials} value={props.config.video.kling} modelLabel={l('默认模型', 'Default model')} modelPlaceholder={defaultVideoGenerationModels.kling} modelSuggestions={creatorProviderOfKind('video', 'kling-video')?.models.map(model => model.id)} onChange={value => props.update(config => { config.video.kling = value; })} /> : null}
-      {provider === 'veo' ? <OpenAiFields id="video-veo" credential="video.veo.apiKey" configuredCredentials={props.configuredCredentials} value={props.config.video.veo} modelLabel={l('默认模型', 'Default model')} modelPlaceholder={defaultVideoGenerationModels.veo} modelSuggestions={videoGenerationModelIds.veo} baseUrlPlaceholder="https://generativelanguage.googleapis.com/v1beta" onChange={value => props.update(config => { config.video.veo = value; })} /> : null}
+      {provider === 'veo' ? <OpenAiFields id="video-veo" credential="video.veo.apiKey" configuredCredentials={props.configuredCredentials} value={props.config.video.veo} modelLabel={l('默认模型', 'Default model')} modelPlaceholder={defaultVideoGenerationModels.veo} modelReadonly baseUrlPlaceholder="https://generativelanguage.googleapis.com/v1beta" onChange={value => props.update(config => { config.video.veo = { ...value, model: defaultVideoGenerationModels.veo }; })} /> : null}
     </SettingsFieldset>
   );
 }
@@ -1218,24 +1254,59 @@ function VolcengineAsrFields(props: {
   configuredCredentials: ReadonlySet<CreatorServicesCredentialField>;
   value: VolcengineAsrConfig;
   onChange(value: VolcengineAsrConfig): void;
+  onAppIdClearChange(cleared: boolean): void;
 }) {
   const l = useLocalizedCopy();
+  // The wire form is still decided by App ID presence, but that alone cannot
+  // express intent: an empty App ID is both "newer-console API Key" and "legacy
+  // mode, not filled in yet". The toggle carries that intent and drives which
+  // fields are shown; the legacy headers only actually apply once an App ID is
+  // present, which `legacyActive` reports separately.
+  const hasAppId = props.value.appId.trim().length > 0
+    || props.configuredCredentials.has('transcription.volcengine.appId');
+  const [useLegacy, setUseLegacy] = useState(hasAppId);
+  const legacyActive = useLegacy && hasAppId;
   return (
     <>
-      <PasswordField
-        id="transcription-volcengine-app-id"
-        label="App ID"
-        value={props.value.appId}
-        configured={props.configuredCredentials.has('transcription.volcengine.appId')}
-        onChange={appId => props.onChange({ ...props.value, appId })}
+      <ToggleField
+        label={l('使用旧版凭据', 'Use legacy credentials')}
+        description={l(
+          '关闭时使用新版控制台的单个 API Key（X-Api-Key）；开启后填写旧版控制台的 App ID 与 Access Token。',
+          'Off uses the newer-console single API Key (X-Api-Key). On switches to the legacy console App ID and Access Token pair.'
+        )}
+        checked={useLegacy}
+        onChange={next => {
+          setUseLegacy(next);
+          // Leaving legacy mode clears the App ID, which is what actually
+          // selects the API Key wire form for the request.
+          props.onAppIdClearChange(!next);
+          if (!next) props.onChange({ ...props.value, appId: '' });
+        }}
       />
+      {useLegacy ? (
+        <PasswordField
+          id="transcription-volcengine-app-id"
+          label="App ID"
+          value={props.value.appId}
+          configured={props.configuredCredentials.has('transcription.volcengine.appId')}
+          onChange={appId => props.onChange({ ...props.value, appId })}
+        />
+      ) : null}
       <PasswordField
         id="transcription-volcengine-access-token"
-        label="Access Token"
+        label={useLegacy ? 'Access Token' : 'API Key'}
         value={props.value.accessToken}
         configured={props.configuredCredentials.has('transcription.volcengine.accessToken')}
         onChange={accessToken => props.onChange({ ...props.value, accessToken })}
       />
+      {useLegacy && !legacyActive ? (
+        <p className="creator-services-inline-note">
+          {l(
+            '旧版模式需要 App ID 才会按旧版协议发送；App ID 留空时该凭据仍会作为新版 API Key 以 X-Api-Key 发送。',
+            'Legacy mode only takes effect once an App ID is set; while it is empty the credential is still sent as a newer-console API Key via X-Api-Key.'
+          )}
+        </p>
+      ) : null}
       <TextField
         id="transcription-volcengine-resource-id"
         label={l('资源 ID', 'Resource ID')}
@@ -1258,9 +1329,15 @@ function VolcengineAsrFields(props: {
 function VolcengineTtsFields(props: {
   configuredCredentials: ReadonlySet<CreatorServicesCredentialField>;
   value: VolcengineTtsConfig;
+  onAppIdClearChange(cleared: boolean): void;
   onChange(value: VolcengineTtsConfig): void;
 }) {
   const l = useLocalizedCopy();
+  const supportsApiKey = volcengineTtsUsesApiKey(props.value.model);
+  const hasAppId = props.value.appId.trim().length > 0
+    || props.configuredCredentials.has('tts.volcengine.appId');
+  const [useLegacy, setUseLegacy] = useState(hasAppId);
+  const apiKeyActive = supportsApiKey && !useLegacy;
   return (
     <>
       <TextField
@@ -1271,20 +1348,45 @@ function VolcengineTtsFields(props: {
         onChange={baseUrl => props.onChange({ ...props.value, baseUrl })}
         wide
       />
-      <PasswordField
-        id="tts-volcengine-app-id"
-        label="App ID"
-        value={props.value.appId}
-        configured={props.configuredCredentials.has('tts.volcengine.appId')}
-        onChange={appId => props.onChange({ ...props.value, appId })}
-      />
+      {supportsApiKey ? (
+        <ToggleField
+          label={l('使用旧版凭据', 'Use legacy credentials')}
+          description={l(
+            '关闭时使用新版控制台的单个 API Key（X-Api-Key）；开启后填写旧版控制台的 App ID 与 Access Token。',
+            'Off uses the newer-console single API Key (X-Api-Key). On switches to the legacy console App ID and Access Token pair.'
+          )}
+          checked={useLegacy}
+          onChange={next => {
+            setUseLegacy(next);
+            props.onAppIdClearChange(!next);
+            if (!next) props.onChange({ ...props.value, appId: '' });
+          }}
+        />
+      ) : null}
+      {!supportsApiKey || useLegacy ? (
+        <PasswordField
+          id="tts-volcengine-app-id"
+          label="App ID"
+          value={props.value.appId}
+          configured={props.configuredCredentials.has('tts.volcengine.appId')}
+          onChange={appId => props.onChange({ ...props.value, appId })}
+        />
+      ) : null}
       <PasswordField
         id="tts-volcengine-access-token"
-        label="Access Token"
+        label={apiKeyActive ? 'API Key' : 'Access Token'}
         value={props.value.accessToken}
         configured={props.configuredCredentials.has('tts.volcengine.accessToken')}
         onChange={accessToken => props.onChange({ ...props.value, accessToken })}
       />
+      {supportsApiKey && useLegacy && !hasAppId ? (
+        <p className="creator-services-inline-note">
+          {l(
+            '旧版模式需要 App ID 才会按旧版协议发送；App ID 留空时该凭据仍会作为新版 API Key 以 X-Api-Key 发送。',
+            'Legacy mode only takes effect once an App ID is set; while it is empty the credential is still sent as a newer-console API Key via X-Api-Key.'
+          )}
+        </p>
+      ) : null}
       <SelectField
         id="tts-volcengine-cluster"
         label={l('接口 / 集群', 'API / cluster')}

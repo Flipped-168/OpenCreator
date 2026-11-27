@@ -6,6 +6,7 @@ import {
   videoGenerationPanelAdapter,
   videoDownloadPanelAdapter,
   creatorPanelAdapterFor,
+  creatorSystemIssueText,
   stickmanVideoPanelAdapter,
   type CreatorPanelLocalize
 } from './creator-panel-adapters.js';
@@ -22,6 +23,39 @@ describe('video download controls', () => {
     const reconnecting = { ...paused, progress: { phase: 'preparing_download', percent: 42, resumedFromStageRunId: 'previous' } };
     expect(videoDownloadPanelAdapter.runningProgressText?.(reconnecting, videoDownloadPanelAdapter.readStageProgress(reconnecting, en), en))
       .toBe('Reconnecting to resume download');
+  });
+});
+
+describe('video translation failures', () => {
+  it.each([
+    ['zh-CN', '积分不足。请充值后重试当前阶段。'],
+    ['en-US', 'Not enough credits. Top up your credits and retry this stage.'],
+    ['sv-SE', 'Otillräckligt med krediter. Fyll på krediter och försök igen med det här steget.']
+  ] as const)('gives recharge guidance in %s', (language, message) => {
+    expect(creatorSystemIssueText('credits_insufficient', createLocalizedCopy(language))).toBe(message);
+  });
+  it('explains pending transcription in each supported language', () => {
+    expect(creatorSystemIssueText('audio_transcription_pending', zh)).toContain('核对');
+    expect(creatorSystemIssueText('audio_transcription_pending', en)).toContain('verified');
+    expect(creatorSystemIssueText('audio_transcription_pending', createLocalizedCopy('sv-SE'))).toContain('kontrolleras');
+  });
+  it.each([
+    ['zh-CN', '语音转录请求频率受限。请稍后重试当前阶段。'],
+    ['en-US', 'The transcription request was rate-limited. Try this stage again later.'],
+    ['sv-SE', 'Transkriptionsbegäran begränsades på grund av för många anrop. Försök igen med det här steget senare.']
+  ] as const)('shows rate limiting rather than pending verification in %s', (language, message) => {
+    expect(creatorSystemIssueText('audio_transcription_rate_limited', createLocalizedCopy(language))).toBe(message);
+  });
+  it('describes a rejected Chinese translation without exposing the raw stage message', () => {
+    const failed = { ...stage('subtitle', '', 'failed', null, 'subtitle'),
+      errorCode: 'creator_translation_output_language_mismatch',
+      errorMessage: 'internal model response' };
+    expect(videoTranslationPanelAdapter.failedProgressText?.(failed, zh))
+      .toBe('目标语言是中文，但生成的字幕主要仍是英文，未通过检查。');
+    expect(videoTranslationPanelAdapter.failedProgressText?.(failed, en))
+      .toBe('The target language is Chinese, but the generated subtitles were mostly English and did not pass validation.');
+    expect(videoTranslationPanelAdapter.failedProgressText?.(failed, createLocalizedCopy('sv-SE')))
+      .toBe('Målspråket är kinesiska, men de genererade undertexterna var mestadels på engelska och klarade inte kontrollen.');
   });
 });
 
@@ -85,6 +119,19 @@ describe('video generation progress', () => {
 });
 
 describe('shared native image progress', () => {
+  it('treats the unmeasured image provider wait as indeterminate while preserving real progress', () => {
+    const adapter = creatorPanelAdapterFor('image-generation');
+    const waiting = { ...stage('generate', '', 'running', null, 'generate'), progress: {
+      phase: 'generating_candidates', percent: 10, completed: 0, failed: 0, total: 1
+    } };
+    expect(adapter.phaseLabel('generating_candidates', zh)).toBe('正在生成图片');
+    expect(adapter.phaseLabel('generating_candidates', en)).toBe('Generating image');
+    expect(adapter.phaseLabel('generating_candidates', createLocalizedCopy('sv-SE'))).toBe('Skapar bild');
+    expect(adapter.readStageProgress(waiting, en)).toMatchObject({ percent: null, indeterminate: true });
+    expect(adapter.readStageProgress({ ...waiting, progress: { ...waiting.progress, percent: 45 } }, en))
+      .toMatchObject({ percent: 45 });
+  });
+
   it.each(['image-generation', 'cover', 'stickman-video', 'wechat-article'])('shows native preparation and generation phases without fake percentages (%s)', template => {
     const adapter = creatorPanelAdapterFor(template);
     expect(adapter.phaseLabel('preparing_native_image', zh)).toContain('ChatGPT');
@@ -163,6 +210,19 @@ describe('video translation component progress', () => {
     if (language !== 'zh-CN') expect(progress.message).not.toMatch(/\p{Script=Han}/u);
   });
 
+  it.each(['zh-CN', 'en-US', 'sv-SE'] as const)('explains that audio translation is waiting for the next provider result in %s', language => {
+    const localize = createLocalizedCopy(language);
+    const running = { ...stage('subtitle', '', 'running', null, 'subtitle'), progress: {
+      phase: 'translating_audio', percent: 57, completed: 0, total: 1,
+      message: '音频分段 1/1；语音识别 1/1 段；字幕翻译 0/1 段'
+    } };
+    const progress = videoTranslationPanelAdapter.readStageProgress(running, localize);
+    expect(progress).toMatchObject({ showMessage: true, showTiming: true, percent: 57, completed: 0, total: 1 });
+    expect(videoTranslationPanelAdapter.runningProgressText?.(running, progress, localize)).toContain('0/1');
+    expect(progress.message).toContain(language === 'zh-CN' ? '等待翻译服务返回结果' : language === 'en-US' ? 'Waiting for the translation service' : 'Väntar på att översättningstjänsten');
+    if (language !== 'zh-CN') expect(progress.message).not.toMatch(/\p{Script=Han}/u);
+  });
+
   it.each([
     ['downloading_media', '正在下载视频：12.0 MiB / 24.0 MiB；2.0 MiB/s；预计剩余 6 秒', '12.0 MiB / 24.0 MiB'],
     ['extracting_audio', '正在提取音频；已处理 12 秒 / 60 秒', '12 s / 60 s'],
@@ -220,7 +280,8 @@ describe('video translation component progress', () => {
     expect(videoTranslationPanelAdapter.normalizeActivity(activity('run-stage', { stageId: running.stageId }), zh))
       .toEqual({ label: '开始下载原视频预览', fields: [] });
     expect(videoTranslationPanelAdapter.readStageProgress(running, en)).toMatchObject({ percent: 40, indeterminate: false, message: 'Downloading the source video: 4.0 MiB / 10.0 MiB' });
-    expect(videoTranslationPanelAdapter.readStageProgress({ ...running, progress: { phase: 'normalizing_media', percent: 98 } }, zh)).toMatchObject({ percent: null, indeterminate: true });
+    expect(videoTranslationPanelAdapter.readStageProgress({ ...running, progress: { phase: 'normalizing_media', percent: 98, phasePercent: 50 } }, zh)).toMatchObject({ percent: 98, phasePercent: 50, indeterminate: false, message: '正在转换原视频为本机兼容格式' });
+    expect(videoTranslationPanelAdapter.readStageProgress({ ...running, progress: { phase: 'normalizing_media', percent: 98.90059326924516 } }, zh)).toMatchObject({ percent: 99, phasePercent: 90, indeterminate: false });
     expect(videoTranslationPanelAdapter.failedProgressText?.(running, zh)).toContain('可重试');
     expect(videoTranslationPanelAdapter.succeededProgressText?.(running, zh)).toContain('已就绪');
   });
@@ -263,7 +324,7 @@ describe('video translation component progress', () => {
     expect(videoTranslationPanelAdapter.readStageProgress(running, zh)).toMatchObject({ percent: 40, indeterminate: false, message: expect.stringContaining('4.0 MiB / 10.0 MiB') });
     expect(videoTranslationPanelAdapter.readStageProgress(running, en).message).toContain('subtitles will not be translated again');
     expect(videoTranslationPanelAdapter.readStageProgress({ ...running, progress: { phase: 'downloading', percent: null } }, zh)).toMatchObject({ percent: null, indeterminate: true });
-    expect(videoTranslationPanelAdapter.readStageProgress({ ...running, progress: { phase: 'normalizing_media', percent: 98 } }, zh)).toMatchObject({ percent: null, indeterminate: true });
+    expect(videoTranslationPanelAdapter.readStageProgress({ ...running, progress: { phase: 'normalizing_media', percent: 98, phasePercent: 50 } }, zh)).toMatchObject({ percent: 98, phasePercent: 50, indeterminate: false, message: '正在转换原视频为本机兼容格式，已有字幕会保留。' });
     expect(videoTranslationPanelAdapter.normalizeActivity(activity('run-stage', { stageId: 'prepare-source-video' }), zh))
       .toEqual({ label: '开始准备原视频预览，保留已有字幕', fields: [] });
   });

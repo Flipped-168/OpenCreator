@@ -21,8 +21,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Bilibili](https://img.shields.io/badge/dynamic/json?label=Bilibili&query=%24.data.follower&suffix=%E7%B2%89%E4%B8%9D&url=https%3A%2F%2Fapi.bilibili.com%2Fx%2Frelation%2Fstat%3Fvmid%3D242124650&logo=bilibili&color=00A1D6&labelColor=FE7398&logoColor=FFFFFF)](https://space.bilibili.com/242124650)
 [![AtomGit G-Star](https://img.shields.io/badge/AtomGit-G--Star-DA203E?style=flat)](https://atomgit.com/krillinai/OpenCreator)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/fUNvbqDaw)
-[![QQ समूह](https://img.shields.io/badge/QQ%20群-754069680-green?logo=tencent-qq)](https://qm.qq.com/q/W4YC0PLMeA)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/KrillinAIJunxi)
 
 [विशेषताएँ](#project-highlights) · [रचना उपकरण](#creator-tools) · [Skills](#skills) · [उदाहरण](#examples) · [शुरुआत](#quick-start) · [Desktop](#desktop) · [दस्तावेज़](#documentation) · [समुदाय](#community)
 
@@ -303,6 +302,12 @@ https://github.com/user-attachments/assets/c2c7b528-0ef8-4ba9-b8ac-f9f92f6d4e71
 </table>
 
 > ये वीडियो उदाहरण और उपशीर्षक संरेखण चित्र KrillinAI नाम के समय बनाए गए थे।
+
+#### सबटाइटल एडिटर
+
+बिल्ट-इन सबटाइटल एडिटर में मूल और अनुवादित टेक्स्ट को साथ-साथ संपादित करने, सिंक्रोनाइज़्ड वीडियो प्रीव्यू, प्लेबैक से जुड़ी वेवफ़ॉर्म और टाइमलाइन तथा कस्टमाइज़ेबल सबटाइटल स्टाइल की सुविधा मिलती है।
+
+![OpenCreator subtitle editor](../images/examples/video-translation-subtitle-editor-en.png)
 
 <a id="video-downloader"></a>
 
@@ -590,7 +595,7 @@ OpenCreator/
 | वातावरण चर | डिफ़ॉल्ट | उद्देश्य |
 | --- | --- | --- |
 | `OPENCREATOR_DATA_DIR` | `.runtime` | OpenCreator डेटाबेस, Run, संलग्नक और प्रबंधित कार्यक्षेत्र |
-| `OPENCREATOR_GATEWAY_ORIGIN` | `https://www.open-creator.ai` | लॉगिन, सदस्यता, क्रेडिट और आधिकारिक मॉडल सेवाओं का Gateway; स्थानीय Gateway के लिए बदलें |
+| `OPENCREATOR_GATEWAY_ORIGIN` | `https://open-creator.ai` | लॉगिन, सदस्यता, क्रेडिट और आधिकारिक मॉडल सेवाओं का Gateway; स्थानीय Gateway के लिए बदलें |
 | `OPENCREATOR_CODEX_BIN` | `codex` | Codex CLI निष्पादन योग्य फ़ाइल का पथ |
 | `CODEX_HOME` | `~/.codex` | Codex सत्र, कॉन्फ़िगरेशन, Skills, MCP और Profiles का प्रामाणिक स्रोत |
 | `OPENCREATOR_DEFAULT_CWD` | वर्तमान कार्य फ़ोल्डर | daemon का डिफ़ॉल्ट कार्य फ़ोल्डर |
@@ -679,7 +684,7 @@ pnpm --filter @opencreator/daemon test -- test/smoke/real-codex-smoke.test.ts
 
 ## समुदाय
 
-<p><strong>कम-से-कम 107 देशों और क्षेत्रों</strong> के GitHub उपयोगकर्ताओं ने OpenCreator को स्टार दिया है।</p>
+<p><strong>कम-से-कम 108 देशों और क्षेत्रों</strong> के GitHub उपयोगकर्ताओं ने OpenCreator को स्टार दिया है।</p>
 
 <img src="../images/star-coverage-map.svg" alt="OpenCreator को GitHub स्टार देने वाले देशों और क्षेत्रों का मानचित्र" width="760" />
 
@@ -692,7 +697,6 @@ pnpm --filter @opencreator/daemon test -- test/smoke/real-codex-smoke.test.ts
 <table border="1" cellpadding="12">
   <tr>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/wulien.svg" width="64" height="64" alt="wulien avatar" /><br /><a href="https://github.com/wulien">wulien</a><br />कोड और त्रुटि सुधार</td>
-    <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/dle-kb.svg" width="64" height="64" alt="DLe-kb avatar" /><br /><a href="https://github.com/DLe-kb">DLe-kb</a><br />रचना टेम्पलेट</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/xiaheyuan.svg" width="64" height="64" alt="xiaheyuan avatar" /><br /><a href="https://github.com/xiaheyuan">xiaheyuan</a><br />डिज़ाइन और संसाधन</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/krillinai.svg" width="64" height="64" alt="krillinai avatar" /><br /><a href="https://github.com/krillinai">krillinai</a><br />Skills और दस्तावेज़</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/hbxugang.svg" width="64" height="64" alt="hbxugang avatar" /><br /><a href="https://github.com/hbxugang">hbxugang</a><br />एंटरप्राइज़ परिनियोजन</td>

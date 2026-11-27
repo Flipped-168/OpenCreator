@@ -21,8 +21,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Bilibili](https://img.shields.io/badge/dynamic/json?label=Bilibili&query=%24.data.follower&suffix=%E7%B2%89%E4%B8%9D&url=https%3A%2F%2Fapi.bilibili.com%2Fx%2Frelation%2Fstat%3Fvmid%3D242124650&logo=bilibili&color=00A1D6&labelColor=FE7398&logoColor=FFFFFF)](https://space.bilibili.com/242124650)
 [![AtomGit G-Star](https://img.shields.io/badge/AtomGit-G--Star-DA203E?style=flat)](https://atomgit.com/krillinai/OpenCreator)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/fUNvbqDaw)
-[![Nhóm QQ](https://img.shields.io/badge/QQ%20群-754069680-green?logo=tencent-qq)](https://qm.qq.com/q/W4YC0PLMeA)
+[![X](https://img.shields.io/badge/X-Follow-000000?logo=x&logoColor=white)](https://x.com/KrillinAIJunxi)
 
 [Điểm nổi bật](#project-highlights) · [Công cụ sáng tạo](#creator-tools) · [Skills](#skills) · [Ví dụ](#examples) · [Bắt đầu](#quick-start) · [Desktop](#desktop) · [Tài liệu](#documentation) · [Cộng đồng](#community)
 
@@ -303,6 +302,12 @@ https://github.com/user-attachments/assets/c2c7b528-0ef8-4ba9-b8ac-f9f92f6d4e71
 </table>
 
 > Các video ví dụ và ảnh căn chỉnh phụ đề được tạo khi OpenCreator còn dùng tên KrillinAI.
+
+#### Trình chỉnh sửa phụ đề
+
+Trình chỉnh sửa phụ đề tích hợp hỗ trợ chỉnh sửa văn bản gốc và bản dịch cạnh nhau, xem trước video đồng bộ, dạng sóng và dòng thởi gian liên kết với phát lại, cùng kiểu phụ đề tùy chỉnh.
+
+![OpenCreator subtitle editor](../images/examples/video-translation-subtitle-editor-en.png)
 
 <a id="video-downloader"></a>
 
@@ -590,7 +595,7 @@ Phần lớn người dùng không cần biến môi trường. Dùng khi cần 
 | Biến môi trường | Mặc định | Mục đích |
 | --- | --- | --- |
 | `OPENCREATOR_DATA_DIR` | `.runtime` | Cơ sở dữ liệu OpenCreator, Run, tệp đính kèm và không gian được quản lý |
-| `OPENCREATOR_GATEWAY_ORIGIN` | `https://www.open-creator.ai` | Gateway đăng nhập, đăng ký, tín dụng và dịch vụ mô hình chính thức; ghi đè để dùng Gateway cục bộ |
+| `OPENCREATOR_GATEWAY_ORIGIN` | `https://open-creator.ai` | Gateway đăng nhập, đăng ký, tín dụng và dịch vụ mô hình chính thức; ghi đè để dùng Gateway cục bộ |
 | `OPENCREATOR_CODEX_BIN` | `codex` | Đường dẫn tệp thực thi Codex CLI |
 | `CODEX_HOME` | `~/.codex` | Nguồn chuẩn cho phiên Codex, cấu hình, Skills, MCP và Profiles |
 | `OPENCREATOR_DEFAULT_CWD` | Thư mục làm việc hiện tại | Thư mục làm việc mặc định của daemon |
@@ -679,7 +684,7 @@ pnpm --filter @opencreator/daemon test -- test/smoke/real-codex-smoke.test.ts
 
 ## Cộng đồng
 
-<p>Người dùng GitHub từ <strong>ít nhất 107 quốc gia và vùng lãnh thổ</strong> đã gắn sao OpenCreator.</p>
+<p>Người dùng GitHub từ <strong>ít nhất 108 quốc gia và vùng lãnh thổ</strong> đã gắn sao OpenCreator.</p>
 
 <img src="../images/star-coverage-map.svg" alt="Bản đồ quốc gia và vùng lãnh thổ có người gắn sao OpenCreator trên GitHub" width="760" />
 
@@ -692,7 +697,6 @@ Mỗi thành viên phụ trách tiêu chuẩn, xét duyệt và hợp nhất đ�
 <table border="1" cellpadding="12">
   <tr>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/wulien.svg" width="64" height="64" alt="wulien avatar" /><br /><a href="https://github.com/wulien">wulien</a><br />Mã nguồn &amp; sửa lỗi</td>
-    <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/dle-kb.svg" width="64" height="64" alt="DLe-kb avatar" /><br /><a href="https://github.com/DLe-kb">DLe-kb</a><br />Mẫu sáng tạo</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/xiaheyuan.svg" width="64" height="64" alt="xiaheyuan avatar" /><br /><a href="https://github.com/xiaheyuan">xiaheyuan</a><br />Thiết kế &amp; tài nguyên</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/krillinai.svg" width="64" height="64" alt="krillinai avatar" /><br /><a href="https://github.com/krillinai">krillinai</a><br />Skills &amp; tài liệu</td>
     <td align="center" valign="middle" width="160" height="160"><img src="../images/contributors/hbxugang.svg" width="64" height="64" alt="hbxugang avatar" /><br /><a href="https://github.com/hbxugang">hbxugang</a><br />Triển khai doanh nghiệp</td>

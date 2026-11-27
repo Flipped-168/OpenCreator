@@ -1,9 +1,6 @@
 package pipeline
 
-import (
-	"encoding/json"
-	"krillin-ai/internal/types"
-)
+import "encoding/json"
 
 type Stage string
 
@@ -15,6 +12,7 @@ const (
 	StageRenderHorizontal Stage = "render-horizontal"
 	StageRenderVertical   Stage = "render-vertical"
 	StageCover            Stage = "cover"
+	StageClip             Stage = "clip"
 	StagePipeline         Stage = "pipeline"
 	StageVoices           Stage = "voices"
 )
@@ -47,10 +45,19 @@ const (
 )
 
 type Error struct {
-	Kind      ErrorKind `json:"kind"`
-	Code      string    `json:"code"`
-	Message   string    `json:"message"`
-	Retryable bool      `json:"retryable"`
+	Kind          ErrorKind              `json:"kind"`
+	Code          string                 `json:"code"`
+	Message       string                 `json:"message"`
+	Retryable     bool                   `json:"retryable"`
+	HTTPStatus    int                    `json:"http_status,omitempty"`
+	UpstreamCode  string                 `json:"upstream_code,omitempty"`
+	RequestID     string                 `json:"request_id,omitempty"`
+	Transcription *transcriptionPosition `json:"transcription,omitempty"`
+}
+
+type transcriptionPosition struct {
+	SegmentNumber int `json:"segment_number"`
+	AttemptNumber int `json:"attempt_number"`
 }
 
 func (e *Error) Error() string {
@@ -94,6 +101,7 @@ type Outputs struct {
 	FinalCoverPrompt    string `json:"cover_prompt,omitempty"`
 	OriginText          string `json:"origin_text,omitempty"`
 	TargetText          string `json:"target_text,omitempty"`
+	ClipIndex           string `json:"clip_index,omitempty"`
 }
 
 type Voice struct {
@@ -109,19 +117,18 @@ type Voice struct {
 }
 
 type Response struct {
-	OK                  bool                               `json:"ok"`
-	Stage               Stage                              `json:"stage"`
-	Workdir             string                             `json:"workdir,omitempty"`
-	TaskID              string                             `json:"task_id,omitempty"`
-	CaptionSource       CaptionSource                      `json:"caption_source,omitempty"`
-	Inputs              map[string]string                  `json:"inputs,omitempty"`
-	Voices              []Voice                            `json:"voices,omitempty"`
-	Outputs             Outputs                            `json:"outputs,omitempty"`
-	Warnings            []string                           `json:"warnings,omitempty"`
-	TranslationFailures []types.SubtitleTranslationFailure `json:"translation_failures,omitempty"`
-	FailedIndexes       []int                              `json:"failed_indexes,omitempty"`
-	Error               *Error                             `json:"error,omitempty"`
-	DurationMS          int64                              `json:"duration_ms,omitempty"`
+	OK            bool              `json:"ok"`
+	Stage         Stage             `json:"stage"`
+	Workdir       string            `json:"workdir,omitempty"`
+	TaskID        string            `json:"task_id,omitempty"`
+	CaptionSource CaptionSource     `json:"caption_source,omitempty"`
+	Inputs        map[string]string `json:"inputs,omitempty"`
+	Voices        []Voice           `json:"voices,omitempty"`
+	Outputs       Outputs           `json:"outputs,omitempty"`
+	Warnings      []string          `json:"warnings,omitempty"`
+	FailedIndexes []int             `json:"failed_indexes,omitempty"`
+	Error         *Error            `json:"error,omitempty"`
+	DurationMS    int64             `json:"duration_ms,omitempty"`
 }
 
 func (r Response) MarshalJSON() ([]byte, error) {

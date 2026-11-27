@@ -2,12 +2,13 @@ import { changeControl } from '../../test/select-option.js';
 import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultCreatorServicesConfig, type CreatorArtifact, type CreatorJob, type CreatorJson, type CreatorTtsProvider, type GatewayAccountState } from '@opencreator/protocol';
+import { createDefaultCreatorServicesConfig, type CodexProviderConfig, type CreatorArtifact, type CreatorJob, type CreatorJson, type CreatorTtsProvider, type GatewayAccountState } from '@opencreator/protocol';
 import { LanguageProvider } from '../../i18n/LanguageProvider.js';
 import { CreatorSessionProvider, useCreatorSession } from './creator-session-store.js';
 import { readTranslationContinuation, saveTranslationContinuation } from './video-translation-continuation.js';
 import VideoTranslationWorkspace from './VideoTranslationWorkspace.js';
 import { OfficialServicesContext } from './official-services.js';
+import DashboardGenerationAccess from './DashboardGenerationAccess.js';
 
 afterEach(() => { vi.useRealTimers(); sessionStorage.clear(); });
 
@@ -26,7 +27,8 @@ function initialJob(state: Record<string, CreatorJson> = {}, artifacts = [subtit
     description: 'Translated subtitles', artifactRefs: { target_subtitle: [artifacts[0]!.id] }, changedArtifactIds: [artifacts[0]!.id], staleArtifactIds: [], state: { ...value.state } }];
   return value;
 }
-function mount(initial = initialJob(), beforeAction?: (action: string) => Promise<void>, services = configuredSpeech(), gateway?: GatewayAccountState | null) {
+function mount(initial = initialJob(), beforeAction?: (action: string) => Promise<void>, services = configuredSpeech(), gateway?: GatewayAccountState | null,
+  catalogService?: { getTextCatalog(): Promise<unknown>; getCachedTextCatalog?(): unknown; getState?(options?: { refreshModels?: boolean }): Promise<GatewayAccountState>; cancel?(): Promise<GatewayAccountState> }, accessGate = false) {
   let current = initial;
   const applyAction = vi.fn(async (_id: string, request: { action: string; input: Record<string, CreatorJson> }) => {
     await beforeAction?.(request.action);
@@ -40,13 +42,15 @@ function mount(initial = initialJob(), beforeAction?: (action: string) => Promis
     return { job: current };
   });
   const onBack = vi.fn();
+  const onGatewayStateChange = vi.fn();
   let push!: (job: CreatorJob) => void;
   function Remote() { push = useCreatorSession().applyRemoteSnapshot; return null; }
+  const content = () => <><Remote /><VideoTranslationWorkspace embedded={accessGate} onBack={onBack} creatorServicesService={services as never} gatewayAccountService={catalogService as never} /></>;
   const workspace = (account: GatewayAccountState | null | undefined) => <StrictMode><LanguageProvider initialPreference="zh-CN"><OfficialServicesContext.Provider value={account}><CreatorSessionProvider initialJob={initial} service={{ applyAction, runAgentTurn: vi.fn() } as never}>
-    <Remote /><VideoTranslationWorkspace onBack={onBack} creatorServicesService={services as never} />
+    {accessGate ? <DashboardGenerationAccess gatewayState={account} gatewayAccountService={catalogService as never} onGatewayStateChange={onGatewayStateChange}>{content()}</DashboardGenerationAccess> : content()}
   </CreatorSessionProvider></OfficialServicesContext.Provider></LanguageProvider></StrictMode>;
   const view = render(workspace(gateway));
-  return { unmount: view.unmount, applyAction, onBack, current: () => current, updateGateway: (value: GatewayAccountState) => view.rerender(workspace(value)), push: (value: CreatorJob) => { current = value; push(value); } };
+  return { unmount: view.unmount, applyAction, onBack, onGatewayStateChange, current: () => current, updateGateway: (value: GatewayAccountState) => view.rerender(workspace(value)), push: (value: CreatorJob) => { current = value; push(value); } };
 }
 function stageCalls(applyAction: ReturnType<typeof mount>['applyAction']) {
   return applyAction.mock.calls.map(([, request]) => request).filter(request => request.action === 'run-stage');
@@ -56,6 +60,7 @@ function configuredSpeech() {
   const config = createDefaultCreatorServicesConfig(); config.tts.openai.apiKey = 'configured';
   config.tts.openai.defaultVoiceId = 'alloy';
   return { getConfig: vi.fn(async () => ({ config, configuredCredentials: ['tts.openai.apiKey'] })),
+    getCodexModelStatus: vi.fn(async (): Promise<CodexProviderConfig> => ({ authentication: 'chatgpt', apiKeyConfigured: false, baseUrl: '', model: '' })),
     getCapabilities: vi.fn(async () => ({ transcription: { providers: [] } })),
     getTtsVoices: vi.fn(async (provider: CreatorTtsProvider, _model?: string) => ({ voices: (provider === 'aliyun'
       ? [{ id: 'Cherry', name: '芊悦' }, { id: 'Serena', name: '苏瑶' }]
@@ -63,6 +68,142 @@ function configuredSpeech() {
 }
 
 describe('video translation two-step flow', () => {
+  it('keeps local and public models visible after returning from unfinished sign-in and cancels authorization on close', async () => {
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    const authorizing: GatewayAccountState = { ...signedOut, source: 'gateway', authState: 'authorizing', activationState: 'loading' };
+    const publicModel = { id: 'vendor/text', name: 'Text One', vendor: 'Vendor', modality: 'text' as const, capabilities: ['chat', 'responses'] };
+    const catalogService = { getTextCatalog: vi.fn(async () => ({ models: [publicModel] })), cancel: vi.fn(async () => signedOut) };
+    const session = mount(initialJob({}, []), undefined, configuredSpeech(), signedOut, catalogService, true);
+    const selector = await screen.findByRole('combobox', { name: '翻译模型' });
+    await waitFor(() => expect(selector).toHaveValue('本机 Codex'));
+    fireEvent.click(selector);
+    fireEvent.click(await screen.findByRole('option', { name: 'Text One' }));
+    session.updateGateway(authorizing);
+    expect(screen.getByRole('dialog', { name: '登录后继续创作' })).toBeInTheDocument();
+    await waitFor(() => expect(selector).toHaveValue('Text One'));
+    fireEvent.click(screen.getByRole('button', { name: '关闭登录窗口' }));
+    await waitFor(() => expect(catalogService.cancel).toHaveBeenCalledTimes(1));
+    expect(session.onGatewayStateChange).toHaveBeenCalledWith(signedOut);
+    expect(screen.queryByRole('dialog', { name: '登录后继续创作' })).not.toBeInTheDocument();
+    fireEvent.click(selector);
+    const list = screen.getByRole('listbox', { name: '翻译模型' });
+    expect(within(list).getByRole('option', { name: '本机 Codex' })).toBeInTheDocument();
+    expect(await within(list).findByRole('option', { name: 'Text One' })).toBeInTheDocument();
+    expect(stageCalls(session.applyAction)).toHaveLength(0);
+    fireEvent.click(within(list).getByRole('option', { name: '本机 Codex' }));
+    session.updateGateway(signedOut);
+    fireEvent.click(screen.getByRole('button', { name: '开始翻译' }));
+    await waitFor(() => expect(stageCalls(session.applyAction)).toHaveLength(1));
+    expect(screen.queryByRole('dialog', { name: '登录后继续创作' })).not.toBeInTheDocument();
+  });
+
+  it('lists local and public translation models, then validates a sign-in selection without starting a task', async () => {
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    const requested = { id: 'vendor/text', name: 'Text One', vendor: 'Vendor', modality: 'text' as const, capabilities: ['chat', 'responses'], price: { version: 'v1', inputPerMillion: 1, outputPerMillion: 2 } };
+    const available: GatewayAccountState = { ...signedOut, source: 'gateway', authState: 'signed_in', activationState: 'ready',
+      account: { id: 'account', email: 'test@example.test', verified: true }, bindingVersion: '1', models: [requested] };
+    const catalogService = { getTextCatalog: vi.fn(async () => ({ models: [requested] })), getState: vi.fn(async () => available) };
+    const session = mount(initialJob({}, []), undefined, configuredSpeech(), signedOut, catalogService, true);
+    const model = await screen.findByRole('combobox', { name: '翻译模型' });
+    await waitFor(() => expect(model).toHaveValue('本机 Codex'));
+    fireEvent.click(model);
+    const list = screen.getByRole('listbox', { name: '翻译模型' });
+    expect(within(list).queryByRole('group')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(list).getAllByRole('option').map(option => option.getAttribute('aria-label'))).toEqual(['本机 Codex', 'Text One']));
+    expect(within(list).getByRole('option', { name: 'Text One' })).toHaveTextContent('积分');
+    fireEvent.click(within(list).getByRole('option', { name: 'Text One' }));
+    expect(screen.getByRole('dialog', { name: '登录后继续创作' })).toBeInTheDocument();
+    expect(stageCalls(session.applyAction)).toHaveLength(0);
+    session.updateGateway(available);
+    await waitFor(() => expect(catalogService.getState).toHaveBeenCalledWith({ refreshModels: true }));
+    await waitFor(() => expect(session.current().state.officialModels).toEqual({ text: requested.id }));
+    expect(stageCalls(session.applyAction)).toHaveLength(0);
+  });
+
+  it('starts a local video translation without requiring gateway sign-in', async () => {
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    const session = mount(initialJob({}, []), undefined, configuredSpeech(), signedOut, { getTextCatalog: async () => ({ models: [] }) }, true);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '翻译模型' })).toHaveValue('本机 Codex'));
+    fireEvent.click(screen.getByRole('button', { name: '开始翻译' }));
+    await waitFor(() => expect(stageCalls(session.applyAction)).toHaveLength(1));
+    expect(screen.queryByRole('dialog', { name: '登录后继续创作' })).not.toBeInTheDocument();
+  });
+
+  it('offers model settings when the selected local Codex runtime is unavailable', async () => {
+    const services = configuredSpeech();
+    services.getCodexModelStatus.mockResolvedValue({ authentication: 'none', apiKeyConfigured: false, baseUrl: '', model: '' });
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    mount(initialJob({}, []), undefined, services, signedOut, { getTextCatalog: async () => ({ models: [] }) }, true);
+    await waitFor(() => expect(services.getCodexModelStatus).toHaveBeenCalled());
+    const model = screen.getByRole('combobox', { name: '翻译模型' });
+    expect(model).toHaveValue('选择模型');
+    fireEvent.click(model);
+    fireEvent.click(screen.getByRole('option', { name: '本机 Codex' }));
+    expect(await screen.findByRole('dialog', { name: '翻译模型设置' })).toBeInTheDocument();
+  });
+
+  it('refreshes local model availability after closing model settings', async () => {
+    const services = configuredSpeech();
+    services.getCodexModelStatus.mockResolvedValue({ authentication: 'none', apiKeyConfigured: false, baseUrl: '', model: '' });
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    mount(initialJob({}, []), undefined, services, signedOut, { getTextCatalog: async () => ({ models: [] }) }, true);
+    const model = screen.getByRole('combobox', { name: '翻译模型' });
+    await waitFor(() => expect(model).toHaveValue('选择模型'));
+    fireEvent.click(model);
+    fireEvent.click(screen.getByRole('option', { name: '本机 Codex' }));
+    const dialog = await screen.findByRole('dialog', { name: '翻译模型设置' });
+    services.getCodexModelStatus.mockResolvedValue({ authentication: 'chatgpt', apiKeyConfigured: false, baseUrl: '', model: '' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭模型设置' }));
+    await waitFor(() => expect(model).toHaveValue('本机 Codex'));
+  });
+
+  it('loads the public text catalog on model open and retries silently on the next open', async () => {
+    const model = { id: 'vendor/text', name: 'Text One', vendor: 'Vendor', modality: 'text' as const, capabilities: ['chat', 'responses'] };
+    const getTextCatalog = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ models: [model] });
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    mount(initialJob({}, []), undefined, configuredSpeech(), signedOut, { getTextCatalog }, true);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '翻译模型' })).toHaveValue('本机 Codex'));
+    expect(getTextCatalog).not.toHaveBeenCalled();
+    const selector = screen.getByRole('combobox', { name: '翻译模型' });
+    fireEvent.click(selector);
+    await waitFor(() => expect(getTextCatalog).toHaveBeenCalledOnce());
+    expect(screen.getByRole('option', { name: '本机 Codex' })).toBeInTheDocument();
+    expect(screen.queryByText('模型列表加载失败，请重试。')).not.toBeInTheDocument();
+    fireEvent.keyDown(selector, { key: 'Escape' });
+    fireEvent.click(selector);
+    expect(await screen.findByRole('option', { name: 'Text One' })).toBeInTheDocument();
+    expect(getTextCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it('switches to the account recommendation when a requested public model is unavailable', async () => {
+    const signedOut: GatewayAccountState = { source: 'manual', authState: 'signed_out', activationState: 'inactive', account: null, bindingVersion: null, models: [], activationError: null };
+    const requested = { id: 'vendor/requested', name: 'Requested', vendor: 'Vendor', modality: 'text' as const, capabilities: ['chat', 'responses'] };
+    const replacement = { id: 'vendor/recommended', name: 'Recommended', vendor: 'Vendor', modality: 'text' as const, capabilities: ['chat', 'responses'], recommended: true };
+    const alternative = { id: 'vendor/alternative', name: 'Alternative', vendor: 'Vendor', modality: 'text' as const, capabilities: ['chat', 'responses'] };
+    const signedIn: GatewayAccountState = { ...signedOut, source: 'gateway', authState: 'signed_in', activationState: 'ready',
+      account: { id: 'account', email: 'test@example.test', verified: true }, bindingVersion: '1', models: [replacement, alternative], recommendedModels: { text: replacement.id } };
+    const catalogService = { getTextCatalog: vi.fn(async () => ({ models: [requested] })), getState: vi.fn(async () => signedIn) };
+    const session = mount(initialJob({}, []), undefined, configuredSpeech(), signedOut, catalogService, true);
+    fireEvent.click(await screen.findByRole('combobox', { name: '翻译模型' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Requested' }));
+    session.updateGateway(signedIn);
+    await waitFor(() => expect(session.current().state.officialModels).toEqual({ text: replacement.id }));
+    expect(screen.getByRole('status', { name: '翻译模型' })).toHaveTextContent('所选模型当前账户不可用，已切换为可用的翻译模型。');
+    expect(stageCalls(session.applyAction)).toHaveLength(0);
+    fireEvent.click(screen.getByRole('combobox', { name: '翻译模型' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Alternative' }));
+    await waitFor(() => expect(session.current().state.officialModels).toEqual({ text: alternative.id }));
+    expect(screen.queryByRole('status', { name: '翻译模型' })).not.toBeInTheDocument();
+  });
+
+  it('disables official model selection until the signed-in account is ready', async () => {
+    const activating: GatewayAccountState = { source: 'gateway', authState: 'signed_in', activationState: 'loading',
+      account: { id: 'account', email: 'test@example.test', verified: true }, bindingVersion: null, activationError: null,
+      models: [{ id: 'vendor/text', modality: 'text', capabilities: ['chat', 'responses'] }] };
+    mount(initialJob({}, []), undefined, configuredSpeech(), activating, undefined, true);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '翻译模型' })).toBeDisabled());
+  });
+
   it.each(['text', 'transcription'] as const)('requires confirmation before regenerating a result with a different %s model', async modality => {
     const gateway: GatewayAccountState = {
       source: 'gateway', transport: 'gateway', authState: 'signed_in', activationState: 'ready',
@@ -169,28 +310,36 @@ describe('video translation two-step flow', () => {
     await act(async () => finish());
   });
 
-  it('shows recovered dubbing progress with the assistant closed and opens it from details', async () => {
+  it('shows recovered dubbing progress without opening an Agent details panel', async () => {
     const initial = initialJob({ composeVideo: true, dubbing: true });
     initial.status = 'running';
     initial.stages = [{ id: 'running_tts', jobId: initial.id, stageId: 'tts', executor: 'test', status: 'running', dispatchStatus: 'claimed',
       claimOwner: null, claimExpiresAt: null, attempt: 1, idempotencyKey: null, scopeKey: null, inputFingerprint: null,
       progress: { workflow: true, baseResultVersion: 1, inputResultVersion: 1, phase: 'generating_voice', percent: 29, completed: 12, total: 41 },
+      errorCode: null, errorMessage: null, startedAt: initial.createdAt, finishedAt: null },
+    { id: 'running_source', jobId: initial.id, stageId: 'preview-source-video', executor: 'download', status: 'running', dispatchStatus: 'claimed',
+      claimOwner: null, claimExpiresAt: null, attempt: 1, idempotencyKey: null, scopeKey: null, inputFingerprint: null,
+      progress: { backgroundSourceDownload: true, previewSourceUrl: initial.state.sourceUrl!, phase: 'downloading', percent: 50,
+        downloadedBytes: 50, totalBytes: 100 },
       errorCode: null, errorMessage: null, startedAt: initial.createdAt, finishedAt: null }];
     const session = mount(initial);
     const bar = screen.getByRole('region', { name: '当前任务进度' });
     expect(bar).toHaveTextContent('已完成 12 / 41 段');
     expect(bar).toHaveTextContent('V2');
-    expect(within(bar).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '29');
+    expect(within(bar).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '14');
+    expect(screen.getByRole('progressbar', { name: '原视频下载进度' })).toHaveAttribute('aria-valuenow', '50');
+    await act(async () => session.push({ ...initial, revision: 2, stages: [initial.stages[0]!, {
+      ...initial.stages[1]!, progress: { ...initial.stages[1]!.progress, percent: 75, downloadedBytes: 75 }
+    }] }));
+    expect(within(bar).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '14');
+    expect(screen.getByRole('progressbar', { name: '原视频下载进度' })).toHaveAttribute('aria-valuenow', '75');
     expect(screen.getByRole('button', { name: 'AI 助手' })).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(within(bar).getByRole('button', { name: '查看详情' }));
-    expect(screen.getByRole('button', { name: 'AI 助手' })).toHaveAttribute('aria-pressed', 'true');
-    expect(document.querySelector('[data-stage-run-id="running_tts"]')).toHaveFocus();
-    fireEvent.click(within(bar).getByRole('button', { name: '查看详情' }));
-    expect(screen.getByRole('button', { name: 'AI 助手' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(bar).queryByRole('button', { name: '查看详情' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('log', { name: '协作时间线' })).not.toBeInTheDocument();
     expect(stageCalls(session.applyAction)).toHaveLength(0);
   });
 
-  it.each(['running', 'failed'] as const)('opens current task details before subtitles exist when the task is %s', status => {
+  it.each(['running', 'failed'] as const)('shows the appropriate pre-result view when the task is %s', status => {
     const initial = initialJob({}, []);
     initial.status = status;
     initial.stages = [{ id: 'current_subtitle', jobId: initial.id, stageId: 'subtitle', executor: 'test', status, dispatchStatus: 'claimed',
@@ -201,15 +350,51 @@ describe('video translation two-step flow', () => {
       startedAt: initial.createdAt, finishedAt: status === 'failed' ? initial.updatedAt : null }];
     const session = mount(initial);
     expect(screen.queryByRole('button', { name: 'AI 助手' })).not.toBeInTheDocument();
-    const detailsButton = within(screen.getByRole('region', { name: '当前任务进度' })).getByRole('button', { name: '查看详情' });
-    const stage = within(screen.getByRole('log', { name: '协作时间线' })).getByRole('article');
-    fireEvent.click(detailsButton);
-    expect(stage).toHaveFocus();
-    expect(screen.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true');
-    detailsButton.focus();
-    fireEvent.click(detailsButton);
-    expect(stage).toHaveFocus();
+    if (status === 'failed') {
+      expect(screen.getByText('翻译任务失败', { selector: '.creator-collaboration-context strong' })).toBeVisible();
+      expect(screen.queryByRole('button', { name: '查看任务诊断' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: '视频翻译项目产出' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: '翻译流程' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '开始翻译' })).not.toBeInTheDocument();
+      expect(screen.getByRole('log', { name: '协作时间线' })).toBeInTheDocument();
+    } else {
+      expect(within(screen.getByRole('region', { name: '当前任务进度' })).queryByRole('button', { name: '查看详情' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('log', { name: '协作时间线' })).not.toBeInTheDocument();
+    }
     expect(stageCalls(session.applyAction)).toHaveLength(0);
+  });
+
+  it('keeps a failed subtitle task visible while a later source preview runs', async () => {
+    const initial = initialJob({ currentStage: 'preview-source-video', currentStep: 1, workspacePhase: 'result' }, []);
+    initial.status = 'failed';
+    const failedSubtitle = {
+      id: 'failed_subtitle', jobId: initial.id, stageId: 'subtitle', executor: 'krillinai', status: 'failed' as const,
+      dispatchStatus: 'finished' as const, claimOwner: null, claimExpiresAt: null, attempt: 1,
+      idempotencyKey: null, scopeKey: null, inputFingerprint: null,
+      progress: { workflow: true, phase: 'reading_platform_captions', percent: 5 },
+      errorCode: 'platform_caption_access_failed', errorMessage: 'YouTube sign-in required',
+      startedAt: initial.createdAt, finishedAt: initial.updatedAt
+    };
+    const preview = {
+      ...failedSubtitle, id: 'running_preview', stageId: 'preview-source-video', executor: 'download',
+      status: 'running' as const, dispatchStatus: 'claimed' as const,
+      progress: { previewSourceUrl: initial.state.sourceUrl!, phase: 'downloading', percent: 7 },
+      errorCode: null, errorMessage: null, finishedAt: null
+    };
+    initial.stages = [failedSubtitle, preview];
+    const session = mount(initial);
+    const failure = screen.getByRole('region', { name: '视频翻译 操作区' });
+    expect(screen.getByText('翻译任务失败', { selector: '.creator-collaboration-context strong' })).toBeVisible();
+    expect(failure).not.toHaveTextContent('原视频预览准备失败');
+    expect(within(failure).getByRole('progressbar', { name: '原视频下载进度' })).toHaveAttribute('aria-valuenow', '7');
+    expect(within(failure).getByRole('button', { name: '重试当前阶段' })).toBeDisabled();
+
+    await act(async () => session.push({ ...initial, revision: 2, stages: [failedSubtitle,
+      { ...preview, status: 'failed', dispatchStatus: 'finished', finishedAt: initial.updatedAt }] }));
+    const retry = within(failure).getByRole('button', { name: '重试当前阶段' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    await waitFor(() => expect(stageCalls(session.applyAction)[0]?.input.stageId).toBe('subtitle'));
   });
 
   it('uses current global speech settings for first dubbing despite saved task defaults, including immediate output', async () => {
@@ -255,7 +440,7 @@ describe('video translation two-step flow', () => {
     fireEvent.click(screen.getByRole('button', { name: '使用当前设置' }));
     await waitFor(() => expect(screen.getByText('阿里云百炼')).toBeVisible());
     expect(screen.getByRole('combobox', { name: '配音音色' })).toHaveAttribute('data-value', 'Cherry');
-    fireEvent.click(screen.getByRole('button', { name: '配音并合成视频' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新配音并合成视频' }));
     await waitFor(() => expect(stageCalls(session.applyAction)).toHaveLength(1));
     expect(stageCalls(session.applyAction)[0]!.input.stageId).toBe('tts');
     expect(session.current().state).toMatchObject({ ttsProvider: 'aliyun', voiceCode: 'Cherry' });
@@ -412,12 +597,17 @@ describe('video translation two-step flow', () => {
     expect(editor).toHaveValue('Edited during download');
   });
 
-  it('saves subtitles and the editor context before configuration, then resumes combined output exactly once', async () => {
+  it.each([true, false])('preserves burn subtitles=%s when resuming dubbing after service configuration', async burnSubtitles => {
     const services = configuredSpeech();
     const response = await services.getConfig(); response.config.tts.openai.apiKey = ''; response.configuredCredentials = [];
     services.getConfig.mockResolvedValue(response);
     const first = mount(initialJob(), undefined, services);
     fireEvent.click(screen.getByRole('button', { name: '配音' }));
+    if (!burnSubtitles) {
+      fireEvent.click(screen.getByRole('switch', { name: '启用配音' }));
+      fireEvent.click(await screen.findByRole('switch', { name: '烧录字幕' }));
+      await waitFor(() => expect(first.current().state.composeVideo).toBe(false));
+    }
     fireEvent.click(screen.getByRole('button', { name: '配音并合成视频' }));
     const configure = await screen.findByRole('button', { name: '去配置配音服务' });
     expect(stageCalls(first.applyAction)).toHaveLength(0);
@@ -437,7 +627,7 @@ describe('video translation two-step flow', () => {
     const returned = mount(saved, undefined, updatedServices);
     await waitFor(() => expect(stageCalls(returned.applyAction)).toHaveLength(1));
     expect(stageCalls(returned.applyAction)[0]!.input).toMatchObject({ stageId: 'tts', workflow: true, inputResultVersion: 1 });
-    expect(returned.current().state).toMatchObject({ composeVideo: true, dubbing: true, ttsProvider: 'aliyun', voiceCode: 'Serena' });
+    expect(returned.current().state).toMatchObject({ composeVideo: burnSubtitles, dubbing: true, ttsProvider: 'aliyun', voiceCode: 'Serena' });
     expect(screen.getByRole('textbox', { name: '横屏字幕 1' })).toHaveValue('Manual correction before setup');
     expect(screen.getByRole('complementary', { name: '配音' })).toBeVisible();
     expect(readTranslationContinuation()).toBeUndefined();
@@ -457,7 +647,7 @@ describe('video translation two-step flow', () => {
 
   it('opens completed subtitles with a full-width timeline and preserves settings when collapsing the sidebar', async () => {
     const session = mount();
-    expect(screen.getByRole('heading', { name: '视频翻译工作区' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '视频翻译', level: 2 })).toBeVisible();
     expect(document.querySelector('main')).toHaveAttribute('data-subtitle-immersive', 'true');
     expect(screen.getByRole('textbox', { name: '横屏字幕 1' })).toHaveValue('Hello');
     expect(screen.getByRole('button', { name: '字幕样式' })).toBeVisible();
@@ -483,6 +673,20 @@ describe('video translation two-step flow', () => {
     expect(stageCalls(session.applyAction)).toHaveLength(0);
   });
 
+  it('opens the shared Agent panel from the immersive subtitle editor', async () => {
+    await act(async () => { mount(); });
+    const assistant = screen.getByRole('button', { name: 'AI 助手' });
+    const editor = screen.getByRole('textbox', { name: '横屏字幕 1' });
+    expect(document.querySelector('.creator-collaboration-panel')).not.toBeInTheDocument();
+    fireEvent.click(assistant);
+    expect(screen.getByRole('button', { name: 'AI 助手' })).toBe(assistant);
+    expect(screen.getByRole('textbox', { name: '横屏字幕 1' })).toBe(editor);
+    expect(assistant).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('.creator-collaboration-panel')).toBeInTheDocument();
+    fireEvent.click(assistant);
+    expect(document.querySelector('.creator-collaboration-panel')).not.toBeInTheDocument();
+  });
+
   it('enters the work area when subtitles arrive and leaves preview preparation optional', async () => {
     const initial = initialJob({}, []);
     initial.status = 'running';
@@ -495,7 +699,7 @@ describe('video translation two-step flow', () => {
 
   it('keeps subtitle-only work free of video settings', () => {
     mount(initialJob({ sourceType: 'subtitle' }));
-    expect(screen.getByRole('heading', { name: '字幕翻译工作区' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '字幕翻译', level: 2 })).toBeVisible();
     expect(screen.queryByRole('button', { name: '合成视频' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '同步视频预览' })).not.toBeInTheDocument();
   });

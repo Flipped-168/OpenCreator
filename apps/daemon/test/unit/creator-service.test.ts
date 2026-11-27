@@ -9,6 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCreatorStageRunner } from '../../src/creator/stage-runner.js';
 import { createCreatorRepository } from '../../src/creator/repository.js';
+import { appendCreatorResultSnapshot } from '../../src/creator/result-snapshots.js';
 import {
   CreatorServiceError,
   createCreatorService
@@ -42,6 +43,28 @@ function setup() {
 }
 
 describe('creator service', () => {
+  it('restores a deduplicated local clip source after switching to a URL', () => {
+    const { db, service } = setup();
+    const job = service.createJob({ projectId: 'project_1', templateId: 'auto-clip', state: {} });
+    const upload = {
+      path: join(tempDir, 'source.mp4'), fileName: 'source.mp4', mimeType: 'video/mp4',
+      size: 1024, sha256: 'same-video', lastModified: null,
+      media: { duration: 120, width: 1920, height: 1080, hasVideo: true, hasAudio: true }
+    };
+    const first = service.registerSourceVideo(job.id, { expectedRevision: job.revision, ...upload });
+    const urlJob = service.applyAction(job.id, {
+      action: 'update-settings', expectedRevision: first.job.revision,
+      input: { patch: { sourceType: 'url', sourceUrl: 'https://www.youtube.com/watch?v=example' } }
+    }).job;
+    const reused = service.registerSourceVideo(job.id, {
+      expectedRevision: urlJob.revision, ...upload, path: join(tempDir, 'duplicate.mp4')
+    });
+
+    expect(reused.deduplicated).toBe(true);
+    expect(reused.job.state).toMatchObject({ sourceType: 'file', sourceArtifactId: first.artifact.id, sourceUrl: '' });
+    expect(reused.job.artifacts.filter(artifact => artifact.kind === 'source_video')).toHaveLength(1);
+    db.close();
+  });
   it('registers and deduplicates manually uploaded article images', () => {
     const { db, service } = setup();
     const job = service.createJob({
@@ -248,6 +271,27 @@ describe('creator service', () => {
     });
     expect(job.presetOrigin?.id).toBe('reference-image-preset');
     db.close();
+  });
+
+  it('accepts an existing local Google video preset draft when Omni is configured', async () => {
+    const services = createDefaultCreatorServicesConfig();
+    services.video.provider = 'veo';
+    services.video.veo.apiKey = 'google-test';
+    const { db, service } = setupPresetService([
+      preset({ module: 'video-generation', id: 'product-ad', runtimeTemplate: { id: 'video-generation', version: 1 },
+        defaults: { prompt: 'A product shot', size: '1280x720', duration: 8 },
+        requirements: { service: 'video', capabilities: ['text-to-video'] } })
+    ], services);
+    try {
+      const created = await service.createJob({ projectId: 'project_preset',
+        preset: { module: 'video-generation', id: 'product-ad', version: 1 }, locale: 'en-US', creationKey: 'legacy-google-preset' });
+      const legacy = { ...created, state: { ...created.state, model: 'veo-3.1-generate-preview' } };
+      expect(() => assertCreatorPresetStageRequirement({ job: legacy, stageId: 'generate', services })).not.toThrow();
+      services.video.veo.apiKey = '';
+      expect(() => assertCreatorPresetStageRequirement({ job: legacy, stageId: 'generate', services })).toThrow();
+    } finally {
+      db.close();
+    }
   });
 
   it('replays only an identical resolved preset creation fingerprint', async () => {
@@ -548,6 +592,7 @@ describe('creator service', () => {
       expectedRevision: 0,
       input: {
         patch: {
+          __creatorUserEdited: true,
           currentStep: 1,
           furthestStep: 1,
           workspacePhase: 'configure'
@@ -559,6 +604,7 @@ describe('creator service', () => {
 
     expect(uiOnly.job.revision).toBe(1);
     expect(uiOnly.job.state.currentStep).toBe(1);
+    expect(uiOnly.job.state.__creatorUserEdited).toBe(true);
     expect(uiOnly.job.activities.map(activity => activity.action)).toEqual(['create-job']);
 
     const mixed = service.applyAction(job.id, {
@@ -580,6 +626,22 @@ describe('creator service', () => {
       action: 'update-settings:draft',
       details: { objectId: 'prompt' }
     });
+    db.close();
+  });
+
+  it('keeps the draft edit marker out of result snapshots', () => {
+    const { db, service } = setup();
+    const job = service.createJob({
+      projectId: 'project_1', templateId: 'cover',
+      state: { prompt: 'Portrait', __creatorUserEdited: true }
+    });
+    const state = appendCreatorResultSnapshot({
+      job, version: 1, changedArtifacts: [], action: 'run-stage', description: 'Generated cover'
+    });
+
+    expect(state.resultSnapshots).toMatchObject([{ state: { prompt: 'Portrait' } }]);
+    expect((state.resultSnapshots as Array<{ state: Record<string, unknown> }>)[0]?.state)
+      .not.toHaveProperty('__creatorUserEdited');
     db.close();
   });
 

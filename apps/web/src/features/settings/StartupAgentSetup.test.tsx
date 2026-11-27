@@ -8,7 +8,7 @@ import type { GatewayAccountSettingsService } from '../../services/gateway-accou
 import {
   StartupAgentSetup, type AgentSetupService
 } from './StartupAgentSetup.js';
-import { availableAgentMode, confirmAgentSetup, isAgentSetupConfirmed, type AgentSetupSnapshot } from './agent-setup-state.js';
+import { availableAgentMode, hasLegacyAgentSetupConfirmation, type AgentSetupSnapshot } from './agent-setup-state.js';
 
 function readiness(accountStatus: 'signed_out' | 'signed_in' | 'expired', state: 'ready' | 'degraded' | 'blocked' = 'ready'): CodexRuntimeReadiness {
   return {
@@ -47,6 +47,41 @@ function mount(service: AgentSetupService, initialSnapshot?: AgentSetupSnapshot)
 describe('StartupAgentSetup', () => {
   afterEach(() => { cleanup(); window.localStorage.clear(); });
 
+  it('starts in English and updates the selector and both modes when the language changes', async () => {
+    window.localStorage.clear();
+    render(<LanguageProvider>
+      <StartupAgentSetup service={createService()} onReady={vi.fn()} onSkip={vi.fn()} />
+    </LanguageProvider>);
+    const user = userEvent.setup();
+    expect(document.documentElement).toHaveAttribute('lang', 'en-US');
+    expect(screen.getByRole('region', { name: 'Get started with Agent' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign-in mode' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Local mode' })).toBeInTheDocument();
+    const englishSelector = screen.getByRole('combobox', { name: 'Display language' });
+    expect(englishSelector).toHaveAttribute('data-value', 'en-US');
+    expect(englishSelector).toHaveValue('English');
+    const localModeButton = screen.getByRole('button', { name: 'Local mode' });
+    expect(englishSelector.compareDocumentPosition(localModeButton) & Node.DOCUMENT_POSITION_PRECEDING).not.toBe(0);
+
+    await user.click(englishSelector);
+    await user.click(screen.getByRole('option', { name: /Chinese \(Simplified\)/ }));
+    expect(document.documentElement).toHaveAttribute('lang', 'zh-CN');
+    expect(screen.getByRole('button', { name: '登录模式' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '本地模式' })).toBeInTheDocument();
+    const chineseSelector = screen.getByRole('combobox', { name: '显示语言' });
+    expect(chineseSelector).toHaveAttribute('data-value', 'zh-CN');
+    expect(chineseSelector).toHaveValue('简体中文 · Chinese (Simplified)');
+
+    await user.click(chineseSelector);
+    await user.click(screen.getByRole('option', { name: 'English' }));
+    await user.click(screen.getByRole('button', { name: 'Sign-in mode' }));
+    expect(screen.getByRole('button', { name: 'Sign in to OpenCreator' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Local mode' }));
+    expect(await screen.findByRole('combobox', { name: 'Provider' })).toBeInTheDocument();
+    expect(window.localStorage.getItem('opencreator.preferences.language')).toBe('en-US');
+  });
+
   it('only offers reuse for a ready Codex with usable credentials', () => {
     const provider: CodexProviderConfig = { baseUrl: 'https://gateway.example.test/v1', model: 'model-1', apiKeyConfigured: true, authentication: 'api_key' };
     expect(availableAgentMode({ readiness: readiness('signed_out', 'degraded'), provider })).toBe('api_key');
@@ -59,12 +94,19 @@ describe('StartupAgentSetup', () => {
     } })).toBeNull();
   });
 
+  it('recognizes legacy confirmation as prior use without consulting live credentials', () => {
+    expect(hasLegacyAgentSetupConfirmation()).toBe(false);
+    window.localStorage.setItem('opencreator.agent-setup-confirmed.v1', JSON.stringify(JSON.stringify([
+      '/tmp/old-runtime/codex', 'api_key', 'api_key', 'https://model.example.test/v1', 'old-model', true
+    ])));
+    expect(hasLegacyAgentSetupConfirmation()).toBe(true);
+  });
+
   it('confirms an existing ChatGPT sign-in without a second detection or a key form', async () => {
     const service = createService();
     const provider: CodexProviderConfig = { baseUrl: '', model: 'gpt-test', apiKeyConfigured: false, authentication: 'chatgpt' };
     const snapshot = { readiness: readiness('signed_in'), provider };
     const { onReady } = mount(service, snapshot);
-    expect(isAgentSetupConfirmed(snapshot)).toBe(false);
     await userEvent.setup().click(screen.getByRole('button', { name: '本地模式' }));
     expect(screen.getByText('已找到本机 Codex')).toBeInTheDocument();
     expect(screen.getByText(/ChatGPT 登录 · gpt-test/)).toBeInTheDocument();
@@ -110,9 +152,6 @@ describe('StartupAgentSetup', () => {
     expect(service.getCodexReadiness).not.toHaveBeenCalled();
     expect(service.getCodexProvider).not.toHaveBeenCalled();
     expect(service.updateCodexProvider).not.toHaveBeenCalled();
-    confirmAgentSetup(snapshot);
-    expect(isAgentSetupConfirmed(snapshot)).toBe(true);
-    expect(isAgentSetupConfirmed({ ...snapshot, provider: { ...provider, apiKeyConfigured: false } })).toBe(false);
   });
 
   it('shows provider configuration only after choosing local mode', async () => {

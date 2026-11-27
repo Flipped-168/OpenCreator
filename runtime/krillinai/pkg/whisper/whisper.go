@@ -8,6 +8,8 @@ import (
 	"go.uber.org/zap"
 	"krillin-ai/internal/types"
 	"krillin-ai/log"
+	"net"
+	"net/http"
 	"strings"
 )
 
@@ -17,8 +19,9 @@ func (c *Client) Transcription(audioFile, language, workDir string) (*types.Tran
 	if c.official {
 		granularity = openai.TranscriptionTimestampGranularitySegment
 	}
+	requestID := &responseRequestID{}
 	resp, err := c.client.CreateTranscription(
-		context.Background(),
+		context.WithValue(context.Background(), responseRequestIDKey{}, requestID),
 		openai.AudioRequest{
 			Model:    c.model,
 			FilePath: audioFile,
@@ -34,8 +37,39 @@ func (c *Client) Transcription(audioFile, language, workDir string) (*types.Tran
 		if errors.As(err, &classified) {
 			return nil, err
 		}
-		log.GetLogger().Error("openai create transcription failed", zap.Error(err))
-		return nil, &TranscriptionError{Code: "audio_transcription_api_failed", Message: fmt.Sprintf("transcription service request failed: %v", err), Cause: err}
+		classified = &TranscriptionError{Code: "audio_transcription_api_failed", Message: fmt.Sprintf("transcription service request failed: %v", err), Cause: err, RequestID: requestID.value}
+		var apiError *openai.APIError
+		if errors.As(err, &apiError) {
+			classified.HTTPStatus = apiError.HTTPStatusCode
+			if code, ok := apiError.Code.(string); ok {
+				classified.UpstreamCode = safeDiagnosticCode(code)
+			}
+			if classified.UpstreamCode == "" {
+				classified.UpstreamCode = safeDiagnosticCode(apiError.Type)
+			}
+			if classified.UpstreamCode == "request_outcome_unknown" {
+				classified.Code = "audio_transcription_pending"
+				classified.Message = "transcription request is pending verification; retry this stage later"
+			} else if c.official && apiError.HTTPStatusCode == http.StatusTooManyRequests && apiError.Code == "upstream_rejected" {
+				classified.Code = "audio_transcription_rate_limited"
+				classified.Message = "The transcription request was rate-limited. Try this stage again later."
+			} else if apiError.HTTPStatusCode == http.StatusPaymentRequired && apiError.Code == "credits_insufficient" {
+				classified.Code = "credits_insufficient"
+				classified.Message = "Insufficient credits"
+			}
+		} else {
+			var networkError net.Error
+			if errors.As(err, &networkError) && networkError.Timeout() {
+				classified.UpstreamCode = "network_timeout"
+			} else {
+				classified.UpstreamCode = "network_error"
+			}
+		}
+		log.GetLogger().Error("openai create transcription failed", zap.Error(err),
+			zap.String("code", classified.Code), zap.Int("http_status", classified.HTTPStatus),
+			zap.String("upstream_code", classified.UpstreamCode), zap.String("request_id", classified.RequestID),
+			zap.Bool("retryable", classified.Retryable()))
+		return nil, classified
 	}
 
 	transcriptionData := &types.TranscriptionData{

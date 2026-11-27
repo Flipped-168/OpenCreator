@@ -4,6 +4,18 @@ import type { AppLanguage } from './language.js';
 import { openCreatorLanguages } from '@opencreator/protocol';
 
 describe('additional language catalogs', () => {
+  it('localizes clip review scores, ordering and evidence navigation in every additional language', () => {
+    for (const [language, catalog] of Object.entries(additionalLanguageCatalogs)) {
+      const locale = language as AppLanguage;
+      for (const message of ['AI clip score', 'Sort clips', 'Source order', 'By score', 'Selection reason', 'No selection reason is available for this clip.']) {
+        expect(catalog?.[message], `${language}: ${message}`).toBeTruthy();
+        expect(translateEnglishCopy(locale, message)).toBe(catalog?.[message]);
+        expect(translateEnglishCopy(locale, message)).not.toBe(message);
+      }
+      expect(translateEnglishCopy(locale, 'Jump to 00:12')).toBe(catalog?.['Jump to {{0}}']?.replace('{{0}}', '00:12'));
+    }
+  });
+
   it('covers immersive subtitle editing controls in every client language', () => {
     for (const [language, catalog] of Object.entries(additionalLanguageCatalogs)) {
       for (const key of ['Back to project', 'Subtitle editor', 'Undo', 'Redo', 'Agent Mode', 'Advanced editing',
@@ -26,9 +38,9 @@ describe('additional language catalogs', () => {
   it('covers subtitle translation and download messages in every additional language', () => {
     const messages = [
       'Add an SRT file to translate first', 'Add source', 'Add subtitles', 'Automatic captions',
-      'Bilingual SRT', 'Manual subtitles', 'Remove subtitles', 'Replace file', 'Save subtitles',
+      'Bilingual SRT', 'Manual subtitles', 'Not enough credits.', 'Remove subtitles', 'Replace file', 'Save subtitles',
       'Source type', 'Subtitle Translation', 'Subtitles were saved; the project remains V{{0}}.',
-      'Translate subtitles', 'Translate video', 'Translated SRT', 'Waiting for subtitles'
+      'Top up your credits and retry this stage.', 'Translate subtitles', 'Translate video', 'Translated SRT', 'Waiting for subtitles'
     ];
     for (const [language, catalog] of Object.entries(additionalLanguageCatalogs)) {
       for (const message of messages) {
@@ -37,6 +49,24 @@ describe('additional language catalogs', () => {
       }
       expect(translateEnglishCopy(language as AppLanguage, 'Subtitles were saved; the project remains V12.'))
         .toBe(catalog!['Subtitles were saved; the project remains V{{0}}.']!.replace('{{0}}', '12'));
+    }
+  });
+
+  it('localizes translation model selection and credit estimates in every additional language', () => {
+    const reusedMessages = ['Loading models', 'Could not load the model list. Try again.',
+      'Local model', 'Custom model service', 'Open text model settings', 'Retry'];
+    const newMessages = ['Translation model',
+      'The selected model is unavailable for this account. Another model is selected.',
+      'Price unavailable', 'Input {{0}} / output {{1}} credits/M tokens'];
+    for (const [language, catalog] of Object.entries(additionalLanguageCatalogs)) {
+      for (const message of [...reusedMessages, ...newMessages]) {
+        expect(Object.hasOwn(catalog!, message), `${language}: ${message}`).toBe(true);
+      }
+      for (const message of newMessages) {
+        expect(translateEnglishCopy(language as AppLanguage, message), `${language}: ${message}`).not.toBe(message);
+      }
+      expect(translateEnglishCopy(language as AppLanguage, 'Input 1 / output 2 credits/M tokens'))
+        .toBe(catalog!['Input {{0}} / output {{1}} credits/M tokens']!.replace('{{0}}', '1').replace('{{1}}', '2'));
     }
   });
 

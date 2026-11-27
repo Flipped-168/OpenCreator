@@ -66,8 +66,8 @@ func (s Service) linkToFile(ctx context.Context, stepParam *types.SubtitleTaskSt
 				"-o", audioPath,
 				stepParam.Link,
 			}
-			if config.Conf.App.Proxy != "" {
-				cmdArgs = append(cmdArgs, "--proxy", config.Conf.App.Proxy)
+			if proxy := strings.TrimSpace(config.Conf.App.Proxy); proxy != "" {
+				cmdArgs = append(cmdArgs, "--proxy", proxy)
 			}
 			cmdArgs = appendCookiesArgs(cmdArgs, youtubeCookiesPath)
 			if storage.FfmpegPath != "ffmpeg" {
@@ -118,10 +118,7 @@ func (s Service) linkToFile(ctx context.Context, stepParam *types.SubtitleTaskSt
 		log.GetLogger().Info("linkToFile.unsupported link type", zap.Any("step param", stepParam))
 		return errors.New("linkToFile error: unsupported public video source")
 	}
-	// 音频提取的真实进度可能已超过 6%，保留已报告的较高进度。
-	if stepParam.TaskPtr.ProcessPct < 6 {
-		stepParam.TaskPtr.SetProgress(6)
-	}
+	stepParam.TaskPtr.SetProgress(6)
 	if !stepParam.SkipAudio {
 		stepParam.AudioFilePath = audioPath
 	}
@@ -176,7 +173,7 @@ func isAdditionalVideoSource(value string) bool {
 	case host == "instagram.com" || host == "www.instagram.com":
 		return match(`^/(?:reel|p|tv)/[\w-]+/?$`)
 	case host == "douyin.com" || host == "www.douyin.com":
-		return match(`^/video/\d+/?$`)
+		return match(`^/video/\d+/?$`) || (match(`^/jingxuan(?:/search(?:/[^/]+)?)?/?$`) && regexp.MustCompile(`^\d+$`).MatchString(source.Query().Get("modal_id")))
 	case host == "facebook.com" || host == "www.facebook.com" || host == "m.facebook.com":
 		if match(`^/watch/?$`) {
 			return regexp.MustCompile(`^\d+$`).MatchString(source.Query().Get("v"))
@@ -188,6 +185,10 @@ func isAdditionalVideoSource(value string) bool {
 		return match(`^/pin/\d+/?$`)
 	case host == "b23.tv":
 		return match(`^/[\w-]+/?$`)
+	case host == "redd.it" || host == "v.redd.it":
+		return match(`(?i)^/[a-z0-9]+/?$`)
+	case host == "reddit.com" || host == "www.reddit.com" || host == "old.reddit.com" || host == "np.reddit.com" || host == "m.reddit.com":
+		return match(`(?i)^/(?:(?:r|user)/[\w-]+/)?comments/[a-z0-9]+(?:/.*)?$`) || match(`(?i)^/r/[\w-]+/s/[a-z0-9]+/?$`)
 	default:
 		return false
 	}
